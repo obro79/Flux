@@ -14,17 +14,23 @@ class CoinbaseExchange(BaseExchange):
         return "coinbase"
 
     async def run(self) -> None:
-        async with websockets.connect(self.websocket_url) as websocket:
-            await websocket.send(
-                json.dumps(
-                    {
-                        "type": "subscribe",
-                        "product_ids": [ticker for ticker in self.tickers],
-                        "channel": "market_trades",
-                    }
+        await self.start_producer()
+        try:
+            async with websockets.connect(self.websocket_url) as websocket:
+                await websocket.send(
+                    json.dumps(
+                        {
+                            "type": "subscribe",
+                            "product_ids": [ticker for ticker in self.tickers],
+                            "channel": "market_trades",
+                        }
+                    )
                 )
-            )
 
-            async for message in websocket:
-                data = json.loads(message)
-                print(f"Received data: {data}")
+                async for message in websocket:
+                    data = json.loads(message)
+                    print(f"Received data: {data}")
+                    raw = message.encode() if isinstance(message, str) else bytes(message)
+                    await self.publish("market_trades", raw)
+        finally:
+            await self.stop_producer()
