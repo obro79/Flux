@@ -28,9 +28,9 @@ class CoinbaseExchange(BaseExchange):
                 )
 
                 async for message in websocket:
-                    data = json.loads(message)
-                    print(f"Received data: {data}")
-                    raw = message.encode() if isinstance(message, str) else bytes(message)
+                    raw = (
+                        message.encode() if isinstance(message, str) else bytes(message)
+                    )
                     await self.publish("market_trades", raw)
         finally:
             await self.stop_producer()
