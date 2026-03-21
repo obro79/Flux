@@ -1,26 +1,17 @@
 import asyncio
-import json
-import websockets
+import sys
+from pathlib import Path
 
-COINBASE_WS_URL = "wss://advanced-trade-ws.coinbase.com"
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from exchanges.Coinbase import CoinbaseExchange
 
 
-async def subscribe_to_coinbase():
-    async with websockets.connect(COINBASE_WS_URL) as websocket:
-        await websocket.send(
-            json.dumps(
-                {
-                    "type": "subscribe",
-                    "product_ids": ["BTC-USD"],
-                    "channel": "ticker",
-                }
-            )
-        )
-
-        async for message in websocket:
-            data = json.loads(message)
-            print(f"Received data: {data}")
+def main():
+    """Main function for the ingestion service."""
+    print("Starting ingestion service...")
+    coinbase_exchange = CoinbaseExchange()
+    asyncio.run(coinbase_exchange.run())
 
 
 if __name__ == "__main__":
-    asyncio.run(subscribe_to_coinbase())
+    main()
