@@ -1,0 +1,28 @@
+class RunningEMA:
+    def __init__(self, window_size: int) -> None:
+        self.window_size = window_size
+        self.ema: float | None = None
+        self._warmup_prices: list[float] = []
+        self.multiplier: float = 2 / (window_size + 1)
+
+    def add(self, price: float) -> float:
+        if self.ema is None:
+            self._warmup_prices.append(price)
+            if len(self._warmup_prices) == self.window_size:
+                self.ema = sum(self._warmup_prices) / self.window_size
+            return self.ema if self.ema is not None else price
+        else:
+            self.ema = (price - self.ema) * self.multiplier + self.ema
+            return self.ema
+
+
+class RunningSMA:
+    def __init__(self, window_size: int) -> None:
+        self.window_size: int = window_size
+        self.window: list[float] = []
+
+    def add(self, price: float) -> float:
+        self.window.append(price)
+        if len(self.window) > self.window_size:
+            self.window.pop(0)
+        return sum(self.window) / len(self.window)
