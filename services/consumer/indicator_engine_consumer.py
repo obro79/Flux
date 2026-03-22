@@ -40,6 +40,8 @@ class IndicatorEngineConsumer:
         await self.consumer.start()
         try:
             async for message in self.consumer:
+                if message.value is None:
+                    continue
                 for event in message.value.get("events", []):
                     for ticker in event.get("tickers", []):
                         price = float(ticker["price"])

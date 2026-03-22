@@ -18,7 +18,25 @@ class Database:
         self.connection.close()
 
     def insert_candle(self, candle):
-        pass
+        cursor = self.connection.cursor()
+        cursor.execute(
+            """
+            INSERT INTO candles_1m (product_id, timestamp, open, high, low, close, volume)
+            VALUES (%s, %s, %s, %s, %s, %s, %s)
+            ON CONFLICT (product_id, timestamp) DO NOTHING
+            """,
+            (
+                candle["product_id"],
+                candle["timestamp"],
+                candle["open"],
+                candle["high"],
+                candle["low"],
+                candle["close"],
+                candle["volume"],
+            ),
+        )
+        self.connection.commit()
+        cursor.close()
 
     def rollup_candles(self):
         pass
