@@ -2,10 +2,7 @@ import json
 import asyncio
 from datetime import datetime, timezone
 import aiokafka
-import sys
-import os
-sys.path.append(os.path.join(os.path.dirname(__file__), "..", "database"))
-from database import Database
+from services.database.database import Database
 
 
 class CandleBuffer:
