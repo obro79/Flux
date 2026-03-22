@@ -20,9 +20,14 @@ class Database:
     def insert_candle(self, candle):
         pass
 
-    def get_candles(self, ticker, start_time, end_time):
+    def rollup_candles(self):
         pass
 
-    # TODO: Implement method to aggregate historical data for indicators
-    def aggregate_historical_data(self):
+    def delete_old_candles(self):
         pass
+
+
+if __name__ == "__main__":
+    db = Database()
+    print("Connected to database successfully.")
+    db.disconnect()

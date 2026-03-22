@@ -5,6 +5,12 @@ class TickerConsumer:
     def run(self):
         pass
 
+    def add_price(self, price: float):
+        pass
+
+    def create_candle(self, price: float):
+        pass
+
 
 if __name__ == "__main__":
     import asyncio
