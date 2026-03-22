@@ -22,7 +22,7 @@ class CoinbaseExchange(BaseExchange):
                         {
                             "type": "subscribe",
                             "product_ids": [ticker for ticker in self.tickers],
-                            "channel": "market_trades",
+                            "channel": "ticker",
                         }
                     )
                 )

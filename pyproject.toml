@@ -8,4 +8,5 @@ dependencies = [
     "aiokafka>=0.13.0",
     "asyncio>=4.0.0",
     "websockets>=16.0",
+    "redis>=5.0.0",
 ]
