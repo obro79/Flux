@@ -1,4 +1,11 @@
 import asyncio
+import sys
+from pathlib import Path
+
+# Add project root for "services.*" imports, and this dir for local imports
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
+
 from indicator_engine_consumer import IndicatorEngineConsumer
 from ticker_consumer import TickerConsumer
 from Indicators import RunningSMA, RunningRSI

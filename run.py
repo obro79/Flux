@@ -11,7 +11,11 @@ async def run_all():
         "uv", "run", "services/consumer/main.py",
         stdout=sys.stdout, stderr=sys.stderr,
     )
-    await asyncio.gather(producer.wait(), consumer.wait())
+    api = await asyncio.create_subprocess_exec(
+        "uv", "run", "uvicorn", "services.api.main:app", "--reload",
+        stdout=sys.stdout, stderr=sys.stderr,
+    )
+    await asyncio.gather(producer.wait(), consumer.wait(), api.wait())
 
 
 if __name__ == "__main__":
