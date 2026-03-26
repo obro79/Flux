@@ -7,7 +7,7 @@ class CoinbaseExchange(BaseExchange):
     def __init__(self) -> None:
         super().__init__()
         self.websocket_url: str = "wss://advanced-trade-ws.coinbase.com"
-        self.tickers: list[str] = ["BTC-USD"]
+        self.tickers: list[str] = ["BTC-USD", "ETH-USD", "SOL-USD"]
 
     @property
     def name(self) -> str:

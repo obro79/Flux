@@ -72,7 +72,12 @@ class TickerConsumer:
     async def flush_loop(self) -> None:
         while True:
             await asyncio.sleep(60)
-            self.flush_candles()
+            print(f"Flushing candles... ({len(self.buffers)} buffers)")
+            try:
+                self.flush_candles()
+                print("Flush complete")
+            except Exception as e:
+                print(f"Flush error: {e}")
 
     async def run(self) -> None:
         await self.consumer.start()
@@ -82,10 +87,10 @@ class TickerConsumer:
                 if message.value is None:
                     continue
                 for event in message.value.get("events", []):
-                    for trade in event.get("trades", []):
-                        price = float(trade["price"])
-                        size = float(trade["size"])
-                        product_id = trade["product_id"]
+                    for ticker in event.get("tickers", []):
+                        price = float(ticker["price"])
+                        size = float(ticker.get("volume_24_h", 0))
+                        product_id = ticker["product_id"]
                         self.get_buffer(product_id).add_trade(price, size)
         finally:
             flush_task.cancel()
