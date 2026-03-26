@@ -1,4 +1,4 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, Query, Request
 from pydantic import BaseModel
 from datetime import datetime
 
@@ -12,9 +12,19 @@ class Candle(BaseModel):
     high: float
     low: float
     close: float
-    resolution: str
+    volume: float
 
 
-@router.get("/candle/{product_id}/{resolution}", response_model=Candle)
-async def get_candles(product_id: str, resolution: str):
-    pass
+@router.get("/candles/{product_id}/{resolution}", response_model=list[Candle])
+async def get_candles(
+    request: Request,
+    product_id: str,
+    resolution: str,
+    limit: int = Query(default=100, le=1000),
+):
+    if resolution != "1m":
+        return []
+
+    db = request.app.state.db
+    rows = db.get_candles(product_id, limit)
+    return rows
