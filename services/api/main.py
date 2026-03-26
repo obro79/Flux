@@ -4,7 +4,7 @@ from contextlib import asynccontextmanager
 import redis.asyncio as redis
 from services.database.database import Database
 from services.api.routes.candles import router as candles_router
-from services.api.routes.indicators import router as indicators_router
+from services.api.routes.crypto import router as crypto_router
 
 
 @asynccontextmanager
@@ -21,5 +21,5 @@ async def lifespan(app: FastAPI):
 app: FastAPI = FastAPI(lifespan=lifespan)
 
 
-app.include_router(candles_router)
-app.include_router(indicators_router)
+app.include_router(candles_router, prefix="/candles")
+app.include_router(crypto_router, prefix="/crypto")

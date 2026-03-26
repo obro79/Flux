@@ -6,23 +6,23 @@ from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 router = APIRouter()
 
 
-@router.websocket("/indicators")
-async def stream_indicators(websocket: WebSocket):
+@router.websocket("/{product_id}")
+async def stream_product_indicators(websocket: WebSocket, product_id: str):
     await websocket.accept()
     r = websocket.app.state.redis
 
     try:
         while True:
-            keys = [key async for key in r.scan_iter("indicator:*")]
+            keys = [key async for key in r.scan_iter(f"indicator:{product_id}:*")]
 
             indicators = {}
             for key in keys:
                 value = await r.get(key)
                 if value is not None:
-                    name = key.decode().removeprefix("indicator:")
+                    name = key.decode().removeprefix(f"indicator:{product_id}:")
                     indicators[name] = float(value)
 
             await websocket.send_text(json.dumps(indicators))
-            await asyncio.sleep(0.01)
+            await asyncio.sleep(0.05)
     except WebSocketDisconnect:
         pass

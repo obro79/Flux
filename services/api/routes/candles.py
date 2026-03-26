@@ -15,7 +15,7 @@ class Candle(BaseModel):
     volume: float
 
 
-@router.get("/candles/{product_id}/{resolution}", response_model=list[Candle])
+@router.get("/{product_id}/{resolution}", response_model=list[Candle])
 async def get_candles(
     request: Request,
     product_id: str,
