@@ -1,6 +1,7 @@
 import psycopg2
 from dotenv import load_dotenv
 import os
+from utils import retry_policy
 
 
 load_dotenv()
@@ -11,6 +12,7 @@ class Database:
         self.connection_string: str = os.getenv("DATABASE_URL", "")
         self.connection = self.connect()
 
+    @retry_policy
     def connect(self) -> psycopg2.extensions.connection:
         return psycopg2.connect(self.connection_string)
 

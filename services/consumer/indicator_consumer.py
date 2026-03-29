@@ -5,7 +5,8 @@ from typing import Protocol
 import aiokafka
 import redis.asyncio as redis
 from Indicators import RunningSMA, RunningRSI
-from services.consumer.dead_letter_queue import public_to_dlq
+from services.consumer.dead_letter_queue import publish_to_dlq
+from utils import retry_policy
 
 
 class Indicator(Protocol):
@@ -25,6 +26,7 @@ class IndicatorEngineConsumer:
             value_deserializer=lambda x: json.loads(x) if x else None,
             auto_offset_reset="earliest",
         )
+        self.dlq_producer = aiokafka.AIOKafkaProducer(bootstrap_servers="localhost:9092")
 
     def add_indicator(self, name: str, indicator_cls: type, **kwargs):
         self.indicator_templates[name] = indicator_cls
@@ -38,6 +40,7 @@ class IndicatorEngineConsumer:
             }
         return self.product_indicators[product_id]
 
+    @retry_policy
     async def publish_to_redis(self, product_id: str, indicators: dict):
         async with self.redis.pipeline() as pipe:
             for name, value in indicators.items():
@@ -45,8 +48,10 @@ class IndicatorEngineConsumer:
                     pipe.set(f"indicator:{product_id}:{name}", value)
             await pipe.execute()
 
+    @retry_policy
     async def run(self):
         await self.consumer.start()
+        await self.dlq_producer.start()
         try:
             async for message in self.consumer:
                 try:
@@ -63,9 +68,10 @@ class IndicatorEngineConsumer:
                             await self.publish_to_redis(product_id, results)
                             print(f"{product_id} | Price: {price} | {results}")
                 except Exception as e:
-                    await public_to_dlq(self.consumer, message, e)
+                    await publish_to_dlq(self.dlq_producer, message, e)
         finally:
             await self.consumer.stop()
+            await self.dlq_producer.stop()
             await self.redis.aclose()
 
 

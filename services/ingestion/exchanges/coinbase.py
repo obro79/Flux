@@ -1,6 +1,7 @@
 from .Base import BaseExchange
 import websockets
 import json
+from utils import retry_policy
 
 
 class CoinbaseExchange(BaseExchange):
@@ -13,6 +14,7 @@ class CoinbaseExchange(BaseExchange):
     def name(self) -> str:
         return "coinbase"
 
+    @retry_policy
     async def run(self) -> None:
         await self.start_producer()
         try:

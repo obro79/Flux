@@ -1,5 +1,8 @@
 import asyncio
+import signal
 import sys
+
+signal.signal(signal.SIGTERM, lambda *_: sys.exit(0))
 
 
 async def run_all():

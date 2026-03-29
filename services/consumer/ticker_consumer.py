@@ -4,6 +4,7 @@ from datetime import datetime, timezone
 import aiokafka
 from services.database.database import Database
 from .dead_letter_queue import publish_to_dlq
+from utils import retry_policy
 
 
 class CandleBuffer:
@@ -53,12 +54,16 @@ class TickerConsumer:
             value_deserializer=lambda x: json.loads(x) if x else None,
             auto_offset_reset="earliest",
         )
+        self.dlq_producer = aiokafka.AIOKafkaProducer(
+            bootstrap_servers="localhost:9092"
+        )
 
     def get_buffer(self, product_id: str) -> CandleBuffer:
         if product_id not in self.buffers:
             self.buffers[product_id] = CandleBuffer()
         return self.buffers[product_id]
 
+    @retry_policy
     def flush_candles(self) -> None:
         timestamp = datetime.now(timezone.utc).replace(second=0, microsecond=0)
         for product_id, buffer in self.buffers.items():
@@ -80,8 +85,10 @@ class TickerConsumer:
             except Exception as e:
                 print(f"Flush error: {e}")
 
+    @retry_policy
     async def run(self) -> None:
         await self.consumer.start()
+        await self.dlq_producer.start()
         flush_task = asyncio.create_task(self.flush_loop())
         try:
             async for message in self.consumer:
@@ -95,11 +102,12 @@ class TickerConsumer:
                             product_id = ticker["product_id"]
                             self.get_buffer(product_id).add_trade(price, size)
                 except Exception as e:
-                    await publish_to_dlq(self.consumer, message, e)
+                    await publish_to_dlq(self.dlq_producer, message, e)
         finally:
             flush_task.cancel()
             self.flush_candles()
             await self.consumer.stop()
+            await self.dlq_producer.stop()
             self.db.disconnect()
 
 
