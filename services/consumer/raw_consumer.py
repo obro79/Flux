@@ -3,6 +3,7 @@ import os
 import asyncio
 import aiokafka
 import redis.asyncio as redis
+from .dead_letter_queue import public_to_dlq
 
 
 class RawConsumer:
@@ -27,8 +28,14 @@ class RawConsumer:
                         product_id = ticker["product_id"]
                         async with self.redis.pipeline() as pipe:
                             pipe.set(f"crypto:{product_id}:price", ticker["price"])
-                            pipe.set(f"crypto:{product_id}:volume_24h", ticker.get("volume_24_h", 0))
+                            pipe.set(
+                                f"crypto:{product_id}:volume_24h",
+                                ticker.get("volume_24_h", 0),
+                            )
                             await pipe.execute()
+        except Exception as e:
+            await public_to_dlq(self.consumer, message, e)
+
         finally:
             await self.consumer.stop()
             await self.redis.aclose()

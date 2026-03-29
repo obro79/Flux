@@ -5,6 +5,7 @@ from typing import Protocol
 import aiokafka
 import redis.asyncio as redis
 from Indicators import RunningSMA, RunningRSI
+from services.consumer.dead_letter_queue import public_to_dlq
 
 
 class Indicator(Protocol):
@@ -48,16 +49,21 @@ class IndicatorEngineConsumer:
         await self.consumer.start()
         try:
             async for message in self.consumer:
-                if message.value is None:
-                    continue
-                for event in message.value.get("events", []):
-                    for ticker in event.get("tickers", []):
-                        price = float(ticker["price"])
-                        product_id = ticker["product_id"]
-                        indicators = self.get_indicators(product_id)
-                        results = {name: ind.add(price) for name, ind in indicators.items()}
-                        await self.publish_to_redis(product_id, results)
-                        print(f"{product_id} | Price: {price} | {results}")
+                try:
+                    if message.value is None:
+                        continue
+                    for event in message.value.get("events", []):
+                        for ticker in event.get("tickers", []):
+                            price = float(ticker["price"])
+                            product_id = ticker["product_id"]
+                            indicators = self.get_indicators(product_id)
+                            results = {
+                                name: ind.add(price) for name, ind in indicators.items()
+                            }
+                            await self.publish_to_redis(product_id, results)
+                            print(f"{product_id} | Price: {price} | {results}")
+                except Exception as e:
+                    await public_to_dlq(self.consumer, message, e)
         finally:
             await self.consumer.stop()
             await self.redis.aclose()

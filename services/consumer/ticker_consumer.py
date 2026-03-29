@@ -3,6 +3,7 @@ import asyncio
 from datetime import datetime, timezone
 import aiokafka
 from services.database.database import Database
+from .dead_letter_queue import publish_to_dlq
 
 
 class CandleBuffer:
@@ -84,14 +85,17 @@ class TickerConsumer:
         flush_task = asyncio.create_task(self.flush_loop())
         try:
             async for message in self.consumer:
-                if message.value is None:
-                    continue
-                for event in message.value.get("events", []):
-                    for ticker in event.get("tickers", []):
-                        price = float(ticker["price"])
-                        size = float(ticker.get("volume_24_h", 0))
-                        product_id = ticker["product_id"]
-                        self.get_buffer(product_id).add_trade(price, size)
+                try:
+                    if message.value is None:
+                        continue
+                    for event in message.value.get("events", []):
+                        for ticker in event.get("tickers", []):
+                            price = float(ticker["price"])
+                            size = float(ticker.get("volume_24_h", 0))
+                            product_id = ticker["product_id"]
+                            self.get_buffer(product_id).add_trade(price, size)
+                except Exception as e:
+                    await publish_to_dlq(self.consumer, message, e)
         finally:
             flush_task.cancel()
             self.flush_candles()

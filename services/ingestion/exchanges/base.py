@@ -15,6 +15,7 @@ class BaseExchange(ABC):
     @abstractmethod
     def name(self) -> str:
         """Return the exchange name."""
+        return self.__class__.__name__.lower()
 
     async def ensure_topics(self, topics: list[str]) -> None:
         admin = AIOKafkaAdminClient(bootstrap_servers=self.bootstrap_servers)
@@ -23,7 +24,8 @@ class BaseExchange(ABC):
             existing = await admin.list_topics()
             new_topics = [
                 NewTopic(name=t, num_partitions=1, replication_factor=1)
-                for t in topics if t not in existing
+                for t in topics
+                if t not in existing
             ]
             if new_topics:
                 await admin.create_topics(new_topics)
@@ -31,7 +33,7 @@ class BaseExchange(ABC):
             await admin.close()
 
     async def start_producer(self) -> None:
-        await self.ensure_topics(["market_trades"])
+        await self.ensure_topics(["market_trades", "market_trades.dlq"])
         producer = AIOKafkaProducer(bootstrap_servers=self.bootstrap_servers)
         await producer.start()
         self.producer = producer
