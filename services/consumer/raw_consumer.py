@@ -4,6 +4,7 @@ import asyncio
 import aiokafka
 import redis.asyncio as redis
 from .dead_letter_queue import publish_to_dlq
+from .models import MarketTradeMessage
 from utils import retry_policy
 
 
@@ -28,15 +29,12 @@ class RawConsumer:
                 try:
                     if message.value is None:
                         continue
-                    for event in message.value.get("events", []):
-                        for ticker in event.get("tickers", []):
-                            product_id = ticker["product_id"]
+                    msg = MarketTradeMessage(**message.value)
+                    for event in msg.events:
+                        for ticker in event.tickers:
                             async with self.redis.pipeline() as pipe:
-                                pipe.set(f"crypto:{product_id}:price", ticker["price"])
-                                pipe.set(
-                                    f"crypto:{product_id}:volume_24h",
-                                    ticker.get("volume_24_h", 0),
-                                )
+                                pipe.set(f"crypto:{ticker.product_id}:price", ticker.price)
+                                pipe.set(f"crypto:{ticker.product_id}:volume_24h", ticker.volume_24_h)
                                 await pipe.execute()
                 except Exception as e:
                     await publish_to_dlq(self.dlq_producer, message, e)

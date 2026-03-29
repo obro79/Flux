@@ -2,6 +2,7 @@ import json
 import asyncio
 from datetime import datetime, timezone
 import aiokafka
+from services.consumer.models import MarketTradeMessage
 from services.database.database import Database
 from .dead_letter_queue import publish_to_dlq
 from utils import retry_policy
@@ -85,7 +86,6 @@ class TickerConsumer:
             except Exception as e:
                 print(f"Flush error: {e}")
 
-    @retry_policy
     async def run(self) -> None:
         await self.consumer.start()
         await self.dlq_producer.start()
@@ -95,12 +95,10 @@ class TickerConsumer:
                 try:
                     if message.value is None:
                         continue
-                    for event in message.value.get("events", []):
-                        for ticker in event.get("tickers", []):
-                            price = float(ticker["price"])
-                            size = float(ticker.get("volume_24_h", 0))
-                            product_id = ticker["product_id"]
-                            self.get_buffer(product_id).add_trade(price, size)
+                    msg = MarketTradeMessage(**message.value)
+                    for event in msg.events:
+                        for ticker in event.tickers:
+                            self.get_buffer(ticker.product_id).add_trade(ticker.price, ticker.volume_24_h)
                 except Exception as e:
                     await publish_to_dlq(self.dlq_producer, message, e)
         finally:

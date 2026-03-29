@@ -6,6 +6,7 @@ import aiokafka
 import redis.asyncio as redis
 from Indicators import RunningSMA, RunningRSI
 from services.consumer.dead_letter_queue import publish_to_dlq
+from services.consumer.models import MarketTradeMessage
 from utils import retry_policy
 
 
@@ -57,16 +58,15 @@ class IndicatorEngineConsumer:
                 try:
                     if message.value is None:
                         continue
-                    for event in message.value.get("events", []):
-                        for ticker in event.get("tickers", []):
-                            price = float(ticker["price"])
-                            product_id = ticker["product_id"]
-                            indicators = self.get_indicators(product_id)
+                    msg = MarketTradeMessage(**message.value)
+                    for event in msg.events:
+                        for ticker in event.tickers:
+                            indicators = self.get_indicators(ticker.product_id)
                             results = {
-                                name: ind.add(price) for name, ind in indicators.items()
+                                name: ind.add(ticker.price) for name, ind in indicators.items()
                             }
-                            await self.publish_to_redis(product_id, results)
-                            print(f"{product_id} | Price: {price} | {results}")
+                            await self.publish_to_redis(ticker.product_id, results)
+                            print(f"{ticker.product_id} | Price: {ticker.price} | {results}")
                 except Exception as e:
                     await publish_to_dlq(self.dlq_producer, message, e)
         finally:
