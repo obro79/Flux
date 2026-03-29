@@ -9,6 +9,8 @@ from Indicators import RunningSMA, RunningRSI
 from dead_letter_queue import publish_to_dlq
 from models import MarketTradeMessage
 from utils import retry_policy
+from metrics import messages_consumed_total, redis_writes_total
+
 
 logger = logging.getLogger(__name__)
 
@@ -30,7 +32,9 @@ class IndicatorEngineConsumer:
             value_deserializer=lambda x: json.loads(x) if x else None,
             auto_offset_reset="earliest",
         )
-        self.dlq_producer = aiokafka.AIOKafkaProducer(bootstrap_servers="localhost:9092")
+        self.dlq_producer = aiokafka.AIOKafkaProducer(
+            bootstrap_servers="localhost:9092"
+        )
 
     def add_indicator(self, name: str, indicator_cls: type, **kwargs):
         self.indicator_templates[name] = indicator_cls
@@ -50,6 +54,7 @@ class IndicatorEngineConsumer:
             for name, value in indicators.items():
                 if value is not None:
                     pipe.set(f"indicator:{product_id}:{name}", value)
+                    redis_writes_total.inc()
             await pipe.execute()
 
     @retry_policy
@@ -59,6 +64,7 @@ class IndicatorEngineConsumer:
         try:
             async for message in self.consumer:
                 try:
+                    messages_consumed_total.inc()
                     if message.value is None:
                         continue
                     msg = MarketTradeMessage(**message.value)
@@ -66,12 +72,21 @@ class IndicatorEngineConsumer:
                         for ticker in event.tickers:
                             indicators = self.get_indicators(ticker.product_id)
                             results = {
-                                name: ind.add(ticker.price) for name, ind in indicators.items()
+                                name: ind.add(ticker.price)
+                                for name, ind in indicators.items()
                             }
                             await self.publish_to_redis(ticker.product_id, results)
-                            logger.info("Indicators updated", extra={"product_id": ticker.product_id, "price": ticker.price, "indicators": results})
+                            logger.info(
+                                "Indicators updated",
+                                extra={
+                                    "product_id": ticker.product_id,
+                                    "price": ticker.price,
+                                    "indicators": results,
+                                },
+                            )
                 except Exception as e:
                     await publish_to_dlq(self.dlq_producer, message, e)
+                    dlq_messages_total.inc()
         finally:
             await self.consumer.stop()
             await self.dlq_producer.stop()

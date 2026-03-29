@@ -1,5 +1,6 @@
 import os
 from fastapi import FastAPI
+from prometheus_fastapi_instrumentator import Instrumentator
 from contextlib import asynccontextmanager
 import redis.asyncio as redis
 from services.database.database import Database
@@ -21,6 +22,8 @@ async def lifespan(app: FastAPI):
 
 app: FastAPI = FastAPI(lifespan=lifespan)
 
+
+Instrumentator().instrument(app).expose(app)
 
 app.include_router(candles_router, prefix="/candles")
 app.include_router(crypto_router, prefix="/crypto")

@@ -6,6 +6,7 @@ import redis.asyncio as redis
 from dead_letter_queue import publish_to_dlq
 from models import MarketTradeMessage
 from utils import retry_policy
+from metrics import messages_consumed_total, redis_writes_total, dlq_messages_total
 
 
 class RawConsumer:
@@ -26,6 +27,7 @@ class RawConsumer:
         await self.dlq_producer.start()
         try:
             async for message in self.consumer:
+                messages_consumed_total.inc()
                 try:
                     if message.value is None:
                         continue
@@ -36,8 +38,10 @@ class RawConsumer:
                                 pipe.set(f"crypto:{ticker.product_id}:price", ticker.price)
                                 pipe.set(f"crypto:{ticker.product_id}:volume_24h", ticker.volume_24_h)
                                 await pipe.execute()
+                            redis_writes_total.inc()
                 except Exception as e:
                     await publish_to_dlq(self.dlq_producer, message, e)
+                    dlq_messages_total.inc()
         finally:
             await self.consumer.stop()
             await self.dlq_producer.stop()

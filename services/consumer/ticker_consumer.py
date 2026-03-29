@@ -7,6 +7,7 @@ from models import MarketTradeMessage
 from services.database.database import Database
 from dead_letter_queue import publish_to_dlq
 from utils import retry_policy
+from metrics import messages_consumed_total, dlq_messages_total
 
 logger = logging.getLogger(__name__)
 
@@ -76,7 +77,9 @@ class TickerConsumer:
                 candle["product_id"] = product_id
                 candle["timestamp"] = timestamp
                 self.db.insert_candle(candle)
-                logger.info("Flushed candle", extra={"product_id": product_id, "candle": candle})
+                logger.info(
+                    "Flushed candle", extra={"product_id": product_id, "candle": candle}
+                )
                 buffer.reset()
 
     async def flush_loop(self) -> None:
@@ -95,15 +98,19 @@ class TickerConsumer:
         flush_task = asyncio.create_task(self.flush_loop())
         try:
             async for message in self.consumer:
+                messages_consumed_total.inc()
                 try:
                     if message.value is None:
                         continue
                     msg = MarketTradeMessage(**message.value)
                     for event in msg.events:
                         for ticker in event.tickers:
-                            self.get_buffer(ticker.product_id).add_trade(ticker.price, ticker.volume_24_h)
+                            self.get_buffer(ticker.product_id).add_trade(
+                                ticker.price, ticker.volume_24_h
+                            )
                 except Exception as e:
                     await publish_to_dlq(self.dlq_producer, message, e)
+                    dlq_messages_total.inc()
         finally:
             flush_task.cancel()
             self.flush_candles()
