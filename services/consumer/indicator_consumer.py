@@ -6,8 +6,8 @@ from typing import Protocol
 import aiokafka
 import redis.asyncio as redis
 from Indicators import RunningSMA, RunningRSI
-from services.consumer.dead_letter_queue import publish_to_dlq
-from services.consumer.models import MarketTradeMessage
+from dead_letter_queue import publish_to_dlq
+from models import MarketTradeMessage
 from utils import retry_policy
 
 logger = logging.getLogger(__name__)

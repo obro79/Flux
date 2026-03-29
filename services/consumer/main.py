@@ -2,8 +2,9 @@ import asyncio
 import sys
 from pathlib import Path
 
-# Add project root for "services.*" imports, and this dir for local imports
+# Add project root for "services.*" imports, this dir for local imports, and services/ for utils
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 
 from indicator_consumer import IndicatorEngineConsumer

@@ -3,9 +3,9 @@ import asyncio
 import logging
 from datetime import datetime, timezone
 import aiokafka
-from services.consumer.models import MarketTradeMessage
+from models import MarketTradeMessage
 from services.database.database import Database
-from .dead_letter_queue import publish_to_dlq
+from dead_letter_queue import publish_to_dlq
 from utils import retry_policy
 
 logger = logging.getLogger(__name__)
