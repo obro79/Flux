@@ -1,4 +1,5 @@
 import json
+import logging
 import os
 import asyncio
 from typing import Protocol
@@ -8,6 +9,8 @@ from Indicators import RunningSMA, RunningRSI
 from services.consumer.dead_letter_queue import publish_to_dlq
 from services.consumer.models import MarketTradeMessage
 from utils import retry_policy
+
+logger = logging.getLogger(__name__)
 
 
 class Indicator(Protocol):
@@ -66,7 +69,7 @@ class IndicatorEngineConsumer:
                                 name: ind.add(ticker.price) for name, ind in indicators.items()
                             }
                             await self.publish_to_redis(ticker.product_id, results)
-                            print(f"{ticker.product_id} | Price: {ticker.price} | {results}")
+                            logger.info("Indicators updated", extra={"product_id": ticker.product_id, "price": ticker.price, "indicators": results})
                 except Exception as e:
                     await publish_to_dlq(self.dlq_producer, message, e)
         finally:

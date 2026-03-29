@@ -1,11 +1,14 @@
 import json
 import asyncio
+import logging
 from datetime import datetime, timezone
 import aiokafka
 from services.consumer.models import MarketTradeMessage
 from services.database.database import Database
 from .dead_letter_queue import publish_to_dlq
 from utils import retry_policy
+
+logger = logging.getLogger(__name__)
 
 
 class CandleBuffer:
@@ -73,18 +76,18 @@ class TickerConsumer:
                 candle["product_id"] = product_id
                 candle["timestamp"] = timestamp
                 self.db.insert_candle(candle)
-                print(f"Flushed candle: {product_id} | {candle}")
+                logger.info("Flushed candle", extra={"product_id": product_id, "candle": candle})
                 buffer.reset()
 
     async def flush_loop(self) -> None:
         while True:
             await asyncio.sleep(60)
-            print(f"Flushing candles... ({len(self.buffers)} buffers)")
+            logger.info("Flushing candles", extra={"buffer_count": len(self.buffers)})
             try:
                 self.flush_candles()
-                print("Flush complete")
+                logger.info("Flush complete")
             except Exception as e:
-                print(f"Flush error: {e}")
+                logger.exception("Flush error")
 
     async def run(self) -> None:
         await self.consumer.start()
