@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from .Base import BaseExchange
+from .base import BaseExchange
 
 
 class KrakenExchange(BaseExchange):

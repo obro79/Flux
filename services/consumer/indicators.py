@@ -1,3 +1,6 @@
+from collections import deque
+
+
 class RunningEMA:
     def __init__(self, window_size: int) -> None:
         self.window_size = window_size
@@ -19,12 +22,10 @@ class RunningEMA:
 class RunningSMA:
     def __init__(self, window_size: int) -> None:
         self.window_size: int = window_size
-        self.window: list[float] = []
+        self.window: deque[float] = deque(maxlen=window_size)
 
     def add(self, price: float) -> float:
         self.window.append(price)
-        if len(self.window) > self.window_size:
-            self.window.pop(0)
         return sum(self.window) / len(self.window)
 
 

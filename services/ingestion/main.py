@@ -5,7 +5,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-from exchanges.Coinbase import CoinbaseExchange
+from exchanges.coinbase import CoinbaseExchange
 
 
 def main():

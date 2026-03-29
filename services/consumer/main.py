@@ -9,7 +9,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 from indicator_consumer import IndicatorEngineConsumer
 from ticker_consumer import TickerConsumer
 from raw_consumer import RawConsumer
-from Indicators import RunningSMA, RunningRSI
+from indicators import RunningSMA, RunningRSI
 from prometheus_client import start_http_server
 
 

@@ -1,13 +1,11 @@
-import json
 import asyncio
 import logging
 from datetime import datetime, timezone
-import aiokafka
-from models import MarketTradeMessage
+
+from base_consumer import BaseConsumer
+from models import Ticker
 from services.database.database import Database
-from dead_letter_queue import publish_to_dlq
 from utils import retry_policy
-from metrics import messages_consumed_total, dlq_messages_total
 
 logger = logging.getLogger(__name__)
 
@@ -48,20 +46,12 @@ class CandleBuffer:
         self.volume = 0.0
 
 
-class TickerConsumer:
+class TickerConsumer(BaseConsumer):
     def __init__(self) -> None:
+        super().__init__(group_id="candle_builder")
         self.buffers: dict[str, CandleBuffer] = {}
         self.db = Database()
-        self.consumer = aiokafka.AIOKafkaConsumer(
-            "market_trades",
-            bootstrap_servers="localhost:9092",
-            group_id="candle_builder",
-            value_deserializer=lambda x: json.loads(x) if x else None,
-            auto_offset_reset="earliest",
-        )
-        self.dlq_producer = aiokafka.AIOKafkaProducer(
-            bootstrap_servers="localhost:9092"
-        )
+        self._flush_task: asyncio.Task | None = None
 
     def get_buffer(self, product_id: str) -> CandleBuffer:
         if product_id not in self.buffers:
@@ -89,34 +79,22 @@ class TickerConsumer:
             try:
                 self.flush_candles()
                 logger.info("Flush complete")
-            except Exception as e:
+            except Exception:
                 logger.exception("Flush error")
 
-    async def run(self) -> None:
-        await self.consumer.start()
-        await self.dlq_producer.start()
-        flush_task = asyncio.create_task(self.flush_loop())
-        try:
-            async for message in self.consumer:
-                messages_consumed_total.inc()
-                try:
-                    if message.value is None:
-                        continue
-                    msg = MarketTradeMessage(**message.value)
-                    for event in msg.events:
-                        for ticker in event.tickers:
-                            self.get_buffer(ticker.product_id).add_trade(
-                                ticker.price, ticker.volume_24_h
-                            )
-                except Exception as e:
-                    await publish_to_dlq(self.dlq_producer, message, e)
-                    dlq_messages_total.inc()
-        finally:
-            flush_task.cancel()
-            self.flush_candles()
-            await self.consumer.stop()
-            await self.dlq_producer.stop()
-            self.db.disconnect()
+    async def process_ticker(self, ticker: Ticker) -> None:
+        self.get_buffer(ticker.product_id).add_trade(
+            ticker.price, ticker.volume_24_h
+        )
+
+    async def on_start(self) -> None:
+        self._flush_task = asyncio.create_task(self.flush_loop())
+
+    async def on_stop(self) -> None:
+        if self._flush_task:
+            self._flush_task.cancel()
+        self.flush_candles()
+        self.db.disconnect()
 
 
 if __name__ == "__main__":

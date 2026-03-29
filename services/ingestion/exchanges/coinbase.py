@@ -1,4 +1,4 @@
-from .Base import BaseExchange
+from .base import BaseExchange
 import websockets
 import json
 from utils import retry_policy

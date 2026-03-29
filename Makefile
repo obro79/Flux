@@ -18,3 +18,9 @@ lint:
 
 clean:
 	docker compose down -v
+
+test-ws:
+	websocat ws://localhost:8000/indicators/BTC-USD
+
+test-api:
+	curl http://localhost:8000/indicators/BTC-USD

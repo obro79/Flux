@@ -1,40 +1,27 @@
-import json
 import logging
 import os
-import asyncio
 from typing import Protocol
-import aiokafka
-import redis.asyncio as redis
-from Indicators import RunningSMA, RunningRSI
-from dead_letter_queue import publish_to_dlq
-from models import MarketTradeMessage
-from utils import retry_policy
-from metrics import messages_consumed_total, redis_writes_total
 
+from base_consumer import BaseConsumer
+from models import Ticker
+from utils import retry_policy
+from metrics import redis_writes_total
 
 logger = logging.getLogger(__name__)
+
+REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379")
 
 
 class Indicator(Protocol):
     def add(self, price: float) -> float | None: ...
 
 
-class IndicatorEngineConsumer:
+class IndicatorEngineConsumer(BaseConsumer):
     def __init__(self):
+        super().__init__(group_id="indicator_engine", redis_url=REDIS_URL)
         self.indicator_templates: dict[str, type] = {}
         self.indicator_kwargs: dict[str, dict] = {}
         self.product_indicators: dict[str, dict[str, Indicator]] = {}
-        self.redis = redis.from_url(os.getenv("REDIS_URL", "redis://localhost:6379"))
-        self.consumer = aiokafka.AIOKafkaConsumer(
-            "market_trades",
-            bootstrap_servers="localhost:9092",
-            group_id="indicator_engine",
-            value_deserializer=lambda x: json.loads(x) if x else None,
-            auto_offset_reset="earliest",
-        )
-        self.dlq_producer = aiokafka.AIOKafkaProducer(
-            bootstrap_servers="localhost:9092"
-        )
 
     def add_indicator(self, name: str, indicator_cls: type, **kwargs):
         self.indicator_templates[name] = indicator_cls
@@ -57,42 +44,25 @@ class IndicatorEngineConsumer:
                     redis_writes_total.inc()
             await pipe.execute()
 
-    @retry_policy
-    async def run(self):
-        await self.consumer.start()
-        await self.dlq_producer.start()
-        try:
-            async for message in self.consumer:
-                try:
-                    messages_consumed_total.inc()
-                    if message.value is None:
-                        continue
-                    msg = MarketTradeMessage(**message.value)
-                    for event in msg.events:
-                        for ticker in event.tickers:
-                            indicators = self.get_indicators(ticker.product_id)
-                            results = {
-                                name: ind.add(ticker.price)
-                                for name, ind in indicators.items()
-                            }
-                            await self.publish_to_redis(ticker.product_id, results)
-                            logger.info(
-                                "Indicators updated",
-                                extra={
-                                    "product_id": ticker.product_id,
-                                    "price": ticker.price,
-                                    "indicators": results,
-                                },
-                            )
-                except Exception as e:
-                    await publish_to_dlq(self.dlq_producer, message, e)
-                    dlq_messages_total.inc()
-        finally:
-            await self.consumer.stop()
-            await self.dlq_producer.stop()
-            await self.redis.aclose()
+    async def process_ticker(self, ticker: Ticker) -> None:
+        indicators = self.get_indicators(ticker.product_id)
+        results = {
+            name: ind.add(ticker.price)
+            for name, ind in indicators.items()
+        }
+        await self.publish_to_redis(ticker.product_id, results)
+        logger.info(
+            "Indicators updated",
+            extra={
+                "product_id": ticker.product_id,
+                "price": ticker.price,
+                "indicators": results,
+            },
+        )
 
 
 if __name__ == "__main__":
+    import asyncio
+
     engine = IndicatorEngineConsumer()
     asyncio.run(engine.run())
