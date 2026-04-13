@@ -18,3 +18,8 @@ dependencies = [
     "prometheus-client>=0.24.1",
     "prometheus-fastapi-instrumentator>=7.1.0",
 ]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.3.5",
+]

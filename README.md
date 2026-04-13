@@ -58,7 +58,7 @@ flowchart LR
 
 - **Real-time ingestion** — WebSocket connection to Coinbase for BTC-USD, ETH-USD, SOL-USD
 - **Stream processing** — Kafka-backed pipeline with independent consumer groups
-- **OHLCV candle aggregation** — 1-minute candles built from raw trades and flushed to Postgres
+- **OHLCV candle aggregation** — 1-minute candles built from raw trades with a 5-second grace window for slightly late trades
 - **Streaming indicators** — Running SMA, RSI, and EMA computed per-product and published to Redis
 - **REST + WebSocket API** — Query historical candles or subscribe to live indicator updates
 - **Pluggable exchange adapters** — Abstract base class for adding new exchanges
@@ -70,7 +70,7 @@ flowchart LR
 | Ingestion | `websockets`, `aiokafka` | Connect to exchange feeds, publish to Kafka |
 | Messaging | Apache Kafka (KRaft) | Decouple ingestion from processing |
 | Processing | `asyncio`, custom consumers | Candle aggregation, indicator computation |
-| Storage | PostgreSQL / Supabase | Persistent candle storage |
+| Storage | PostgreSQL | Persistent candle storage |
 | Cache | Redis | Real-time indicator values |
 | API | FastAPI, Uvicorn | REST endpoints + WebSocket streaming |
 | Infra | Docker Compose | Kafka, Redis, Kafka UI |
@@ -85,7 +85,7 @@ docker compose up -d
 uv sync
 
 # 3. Set environment variables
-export DATABASE_URL="your-postgres-connection-string"
+export DATABASE_URL="postgresql://postgres:postgres@localhost:5432/postgres"
 export REDIS_URL="redis://localhost:6379"
 
 # 4. Run all services
@@ -93,6 +93,23 @@ uv run run.py
 ```
 
 Kafka UI is available at `localhost:8888`.
+Grafana is available at `localhost:3000`.
+Prometheus is available at `localhost:9090`.
+
+## Local Validation Flow
+
+```bash
+# infrastructure
+docker compose up -d
+
+# services (in separate terminals)
+DATABASE_URL=postgresql://postgres:postgres@localhost:5432/postgres uv run services/ingestion/main.py
+DATABASE_URL=postgresql://postgres:postgres@localhost:5432/postgres uv run services/consumer/main.py
+DATABASE_URL=postgresql://postgres:postgres@localhost:5432/postgres uv run uvicorn services.api.main:app --reload
+
+# checks
+curl http://127.0.0.1:8000/candles/BTC-USD/1m?limit=3
+```
 
 ## API Endpoints
 

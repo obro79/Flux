@@ -1,6 +1,6 @@
 import asyncio
 import logging
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from base_consumer import BaseConsumer
 from models import Trade
@@ -21,13 +21,23 @@ class CandleBuffer:
         self.low: float = float("inf")
         self.close: float = 0.0
         self.volume: float = 0.0
+        self.open_time: datetime | None = None
+        self.close_time: datetime | None = None
 
-    def add_trade(self, price: float, size: float) -> None:
+    def add_trade(self, trade_time: datetime, price: float, size: float) -> None:
         if self.open is None:
             self.open = price
+            self.open_time = trade_time
+        elif self.open_time is not None and trade_time < self.open_time:
+            self.open = price
+            self.open_time = trade_time
+
+        if self.close_time is None or trade_time >= self.close_time:
+            self.close = price
+            self.close_time = trade_time
+
         self.high = max(self.high, price)
         self.low = min(self.low, price)
-        self.close = price
         self.volume += size
 
     def is_empty(self) -> bool:
@@ -44,22 +54,25 @@ class CandleBuffer:
 
 
 class CandleAggregator:
-    def __init__(self) -> None:
+    def __init__(self, grace_period: timedelta = timedelta(seconds=5)) -> None:
         self.buffers: dict[str, dict[datetime, CandleBuffer]] = {}
+        self.grace_period = grace_period
 
     def add_trade(self, trade: Trade) -> None:
         product_buffers = self.buffers.setdefault(trade.product_id, {})
         bucket = minute_bucket(trade.time)
         buffer = product_buffers.setdefault(bucket, CandleBuffer())
-        buffer.add_trade(trade.price, trade.size)
+        buffer.add_trade(trade.time, trade.price, trade.size)
 
     def flush_ready(self, now: datetime | None = None) -> list[dict[str, object]]:
-        current_minute = minute_bucket(now or datetime.now(timezone.utc))
+        reference_time = now or datetime.now(timezone.utc)
         ready: list[dict[str, object]] = []
 
         for product_id, product_buffers in list(self.buffers.items()):
             ready_minutes = sorted(
-                bucket for bucket in product_buffers if bucket < current_minute
+                bucket
+                for bucket in product_buffers
+                if reference_time >= bucket + timedelta(minutes=1) + self.grace_period
             )
             for bucket in ready_minutes:
                 ready.append(
@@ -92,9 +105,13 @@ class CandleAggregator:
 
 
 class TickerConsumer(BaseConsumer):
-    def __init__(self, db: Database | None = None) -> None:
+    def __init__(
+        self,
+        db: Database | None = None,
+        flush_grace_period: timedelta = timedelta(seconds=5),
+    ) -> None:
         super().__init__(group_id="candle_builder")
-        self.aggregator = CandleAggregator()
+        self.aggregator = CandleAggregator(grace_period=flush_grace_period)
         self.db = db or Database()
         self._flush_task: asyncio.Task | None = None
 
