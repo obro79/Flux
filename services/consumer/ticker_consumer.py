@@ -3,11 +3,15 @@ import logging
 from datetime import datetime, timezone
 
 from base_consumer import BaseConsumer
-from models import Ticker
+from models import Trade
 from services.database.database import Database
 from utils import retry_policy
 
 logger = logging.getLogger(__name__)
+
+
+def minute_bucket(timestamp: datetime) -> datetime:
+    return timestamp.astimezone(timezone.utc).replace(second=0, microsecond=0)
 
 
 class CandleBuffer:
@@ -18,7 +22,7 @@ class CandleBuffer:
         self.close: float = 0.0
         self.volume: float = 0.0
 
-    def add_trade(self, price: float, size: float):
+    def add_trade(self, price: float, size: float) -> None:
         if self.open is None:
             self.open = price
         self.high = max(self.high, price)
@@ -29,7 +33,7 @@ class CandleBuffer:
     def is_empty(self) -> bool:
         return self.open is None
 
-    def to_dict(self) -> dict:
+    def to_dict(self) -> dict[str, float | None]:
         return {
             "open": self.open,
             "high": self.high,
@@ -38,54 +42,98 @@ class CandleBuffer:
             "volume": self.volume,
         }
 
-    def reset(self):
-        self.open = None
-        self.high = float("-inf")
-        self.low = float("inf")
-        self.close = 0.0
-        self.volume = 0.0
+
+class CandleAggregator:
+    def __init__(self) -> None:
+        self.buffers: dict[str, dict[datetime, CandleBuffer]] = {}
+
+    def add_trade(self, trade: Trade) -> None:
+        product_buffers = self.buffers.setdefault(trade.product_id, {})
+        bucket = minute_bucket(trade.time)
+        buffer = product_buffers.setdefault(bucket, CandleBuffer())
+        buffer.add_trade(trade.price, trade.size)
+
+    def flush_ready(self, now: datetime | None = None) -> list[dict[str, object]]:
+        current_minute = minute_bucket(now or datetime.now(timezone.utc))
+        ready: list[dict[str, object]] = []
+
+        for product_id, product_buffers in list(self.buffers.items()):
+            ready_minutes = sorted(
+                bucket for bucket in product_buffers if bucket < current_minute
+            )
+            for bucket in ready_minutes:
+                ready.append(
+                    {
+                        "product_id": product_id,
+                        "timestamp": bucket,
+                        **product_buffers.pop(bucket).to_dict(),
+                    }
+                )
+            if not product_buffers:
+                del self.buffers[product_id]
+
+        return ready
+
+    def flush_all(self) -> list[dict[str, object]]:
+        ready: list[dict[str, object]] = []
+
+        for product_id, product_buffers in list(self.buffers.items()):
+            for bucket in sorted(product_buffers):
+                ready.append(
+                    {
+                        "product_id": product_id,
+                        "timestamp": bucket,
+                        **product_buffers[bucket].to_dict(),
+                    }
+                )
+            del self.buffers[product_id]
+
+        return ready
 
 
 class TickerConsumer(BaseConsumer):
-    def __init__(self) -> None:
+    def __init__(self, db: Database | None = None) -> None:
         super().__init__(group_id="candle_builder")
-        self.buffers: dict[str, CandleBuffer] = {}
-        self.db = Database()
+        self.aggregator = CandleAggregator()
+        self.db = db or Database()
         self._flush_task: asyncio.Task | None = None
 
-    def get_buffer(self, product_id: str) -> CandleBuffer:
-        if product_id not in self.buffers:
-            self.buffers[product_id] = CandleBuffer()
-        return self.buffers[product_id]
+    @retry_policy
+    def flush_ready_candles(self, now: datetime | None = None) -> None:
+        for candle in self.aggregator.flush_ready(now=now):
+            self.db.insert_candle(candle)
+            logger.info(
+                "Flushed candle",
+                extra={
+                    "product_id": candle["product_id"],
+                    "timestamp": candle["timestamp"],
+                    "candle": candle,
+                },
+            )
 
     @retry_policy
-    def flush_candles(self) -> None:
-        timestamp = datetime.now(timezone.utc).replace(second=0, microsecond=0)
-        for product_id, buffer in self.buffers.items():
-            if not buffer.is_empty():
-                candle = buffer.to_dict()
-                candle["product_id"] = product_id
-                candle["timestamp"] = timestamp
-                self.db.insert_candle(candle)
-                logger.info(
-                    "Flushed candle", extra={"product_id": product_id, "candle": candle}
-                )
-                buffer.reset()
+    def flush_all_candles(self) -> None:
+        for candle in self.aggregator.flush_all():
+            self.db.insert_candle(candle)
+            logger.info(
+                "Flushed final candle",
+                extra={
+                    "product_id": candle["product_id"],
+                    "timestamp": candle["timestamp"],
+                    "candle": candle,
+                },
+            )
 
     async def flush_loop(self) -> None:
         while True:
-            await asyncio.sleep(60)
-            logger.info("Flushing candles", extra={"buffer_count": len(self.buffers)})
+            await asyncio.sleep(1)
             try:
-                self.flush_candles()
-                logger.info("Flush complete")
+                self.flush_ready_candles()
             except Exception:
                 logger.exception("Flush error")
 
-    async def process_ticker(self, ticker: Ticker) -> None:
-        self.get_buffer(ticker.product_id).add_trade(
-            ticker.price, ticker.volume_24_h
-        )
+    async def process_trade(self, trade: Trade) -> None:
+        self.aggregator.add_trade(trade)
 
     async def on_start(self) -> None:
         self._flush_task = asyncio.create_task(self.flush_loop())
@@ -93,7 +141,7 @@ class TickerConsumer(BaseConsumer):
     async def on_stop(self) -> None:
         if self._flush_task:
             self._flush_task.cancel()
-        self.flush_candles()
+        self.flush_all_candles()
         self.db.disconnect()
 
 

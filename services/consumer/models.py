@@ -1,15 +1,22 @@
-from pydantic import BaseModel
+from datetime import datetime
+
+from pydantic import BaseModel, Field
 
 
-class Ticker(BaseModel):
+class Trade(BaseModel):
+    trade_id: str
     product_id: str
     price: float
-    volume_24_h: float = 0.0
+    size: float
+    side: str
+    time: datetime
 
 
 class Event(BaseModel):
-    tickers: list[Ticker] = []
+    trades: list[Trade] = Field(default_factory=list)
 
 
 class MarketTradeMessage(BaseModel):
-    events: list[Event] = []
+    channel: str
+    timestamp: datetime
+    events: list[Event] = Field(default_factory=list)

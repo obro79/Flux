@@ -5,30 +5,35 @@ from abc import ABC, abstractmethod
 import aiokafka
 import redis.asyncio as aioredis
 
-from dead_letter_queue import publish_to_dlq
-from models import MarketTradeMessage, Ticker
-from metrics import messages_consumed_total, dlq_messages_total
+from services.consumer.dead_letter_queue import publish_to_dlq
+from services.consumer.models import MarketTradeMessage, Trade
+from services.consumer.metrics import messages_consumed_total, dlq_messages_total
 
 logger = logging.getLogger(__name__)
 
 
 class BaseConsumer(ABC):
-    def __init__(self, group_id: str, redis_url: str | None = None) -> None:
+    def __init__(
+        self,
+        group_id: str,
+        redis_url: str | None = None,
+        bootstrap_servers: str = "localhost:9092",
+    ) -> None:
         self.consumer = aiokafka.AIOKafkaConsumer(
             "market_trades",
-            bootstrap_servers="localhost:9092",
+            bootstrap_servers=bootstrap_servers,
             group_id=group_id,
             value_deserializer=lambda x: json.loads(x) if x else None,
             auto_offset_reset="earliest",
         )
         self.dlq_producer = aiokafka.AIOKafkaProducer(
-            bootstrap_servers="localhost:9092"
+            bootstrap_servers=bootstrap_servers
         )
         self.redis = aioredis.from_url(redis_url) if redis_url else None
 
     @abstractmethod
-    async def process_ticker(self, ticker: Ticker) -> None:
-        """Handle a single ticker update."""
+    async def process_trade(self, trade: Trade) -> None:
+        """Handle a single trade update."""
 
     async def on_start(self) -> None:
         """Hook for subclasses to run setup after Kafka connects."""
@@ -48,10 +53,10 @@ class BaseConsumer(ABC):
                         continue
                     msg = MarketTradeMessage(**message.value)
                     for event in msg.events:
-                        for ticker in event.tickers:
-                            await self.process_ticker(ticker)
-                except Exception:
-                    await publish_to_dlq(self.dlq_producer, message, Exception)
+                        for trade in event.trades:
+                            await self.process_trade(trade)
+                except Exception as exc:
+                    await publish_to_dlq(self.dlq_producer, message, exc)
                     dlq_messages_total.inc()
         finally:
             await self.on_stop()

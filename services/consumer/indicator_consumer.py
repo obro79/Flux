@@ -3,7 +3,7 @@ import os
 from typing import Protocol
 
 from base_consumer import BaseConsumer
-from models import Ticker
+from models import Trade
 from utils import retry_policy
 from metrics import redis_writes_total
 
@@ -44,18 +44,18 @@ class IndicatorEngineConsumer(BaseConsumer):
                     redis_writes_total.inc()
             await pipe.execute()
 
-    async def process_ticker(self, ticker: Ticker) -> None:
-        indicators = self.get_indicators(ticker.product_id)
+    async def process_trade(self, trade: Trade) -> None:
+        indicators = self.get_indicators(trade.product_id)
         results = {
-            name: ind.add(ticker.price)
+            name: ind.add(trade.price)
             for name, ind in indicators.items()
         }
-        await self.publish_to_redis(ticker.product_id, results)
+        await self.publish_to_redis(trade.product_id, results)
         logger.info(
             "Indicators updated",
             extra={
-                "product_id": ticker.product_id,
-                "price": ticker.price,
+                "product_id": trade.product_id,
+                "price": trade.price,
                 "indicators": results,
             },
         )
