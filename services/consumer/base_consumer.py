@@ -5,9 +5,9 @@ from abc import ABC, abstractmethod
 import aiokafka
 import redis.asyncio as aioredis
 
-from services.consumer.dead_letter_queue import publish_to_dlq
-from services.consumer.models import MarketTradeMessage, Trade
-from services.consumer.metrics import messages_consumed_total, dlq_messages_total
+from dead_letter_queue import publish_to_dlq
+from models import MarketTradeMessage, Trade
+from metrics import messages_consumed_total, dlq_messages_total
 
 logger = logging.getLogger(__name__)
 
