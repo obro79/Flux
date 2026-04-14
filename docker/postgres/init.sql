@@ -1,4 +1,5 @@
 CREATE TABLE IF NOT EXISTS candles_1m (
+    exchange TEXT NOT NULL DEFAULT 'coinbase',
     product_id TEXT NOT NULL,
     timestamp TIMESTAMPTZ NOT NULL,
     open DOUBLE PRECISION NOT NULL,
@@ -6,5 +7,5 @@ CREATE TABLE IF NOT EXISTS candles_1m (
     low DOUBLE PRECISION NOT NULL,
     close DOUBLE PRECISION NOT NULL,
     volume DOUBLE PRECISION NOT NULL,
-    PRIMARY KEY (product_id, timestamp)
+    PRIMARY KEY (exchange, product_id, timestamp)
 );

@@ -7,19 +7,43 @@
     "from": "now-1h",
     "to": "now"
   },
+  "schemaVersion": 39,
+  "version": 1,
   "panels": [
     {
-      "title": "Pipeline Throughput (msgs/sec)",
+      "title": "Service Health",
       "type": "timeseries",
-      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
-      "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
       "fieldConfig": {
         "defaults": {
           "custom": {
             "lineWidth": 2,
             "fillOpacity": 10,
-            "pointSize": 5,
             "spanNulls": true
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "expr": "up{job=~\"ingestion|consumer|api\"}",
+          "legendFormat": "{{job}}",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "title": "Publish Rate by Exchange",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "lineWidth": 2,
+            "fillOpacity": 10
           },
           "unit": "ops"
         },
@@ -27,148 +51,54 @@
       },
       "targets": [
         {
-          "expr": "rate(messages_published_total[1m])",
-          "legendFormat": "Published (ingestion)",
+          "expr": "sum by (exchange) (rate(messages_published_total[1m]))",
+          "legendFormat": "{{exchange}}",
           "refId": "A"
-        },
-        {
-          "expr": "rate(messages_consumed_total[1m])",
-          "legendFormat": "Consumed (consumer)",
-          "refId": "B"
         }
       ]
     },
     {
-      "title": "Dead Letter Queue Messages",
-      "type": "stat",
-      "gridPos": { "h": 8, "w": 6, "x": 12, "y": 0 },
-      "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
-      "fieldConfig": {
-        "defaults": {
-          "thresholds": {
-            "steps": [
-              { "color": "green", "value": null },
-              { "color": "red", "value": 1 }
-            ]
-          },
-          "mappings": [
-            {
-              "type": "value",
-              "options": {
-                "0": { "text": "0", "color": "green" }
-              }
-            }
-          ]
-        },
-        "overrides": []
-      },
-      "targets": [
-        {
-          "expr": "dlq_messages_total",
-          "legendFormat": "DLQ Total",
-          "refId": "A"
-        }
-      ],
-      "options": {
-        "colorMode": "background",
-        "graphMode": "none",
-        "textMode": "value",
-        "reduceOptions": {
-          "calcs": ["lastNotNull"]
-        }
-      }
-    },
-    {
-      "title": "Redis Write Rate (writes/sec)",
+      "title": "Consume Rate by Exchange / Consumer Group",
       "type": "timeseries",
-      "gridPos": { "h": 8, "w": 6, "x": 18, "y": 0 },
-      "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
+      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
       "fieldConfig": {
         "defaults": {
           "custom": {
             "lineWidth": 2,
             "fillOpacity": 10
           },
-          "unit": "ops",
-          "color": { "mode": "fixed", "fixedColor": "purple" }
+          "unit": "ops"
         },
         "overrides": []
       },
       "targets": [
         {
-          "expr": "rate(redis_writes_total[1m])",
-          "legendFormat": "Redis Writes",
+          "expr": "sum by (exchange, consumer_group) (rate(messages_consumed_total[1m]))",
+          "legendFormat": "{{exchange}} / {{consumer_group}}",
           "refId": "A"
         }
       ]
     },
     {
-      "title": "API Request Rate (req/sec)",
+      "title": "Redis Writes by Exchange / Consumer Group",
       "type": "timeseries",
-      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
-      "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 8 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
       "fieldConfig": {
         "defaults": {
           "custom": {
             "lineWidth": 2,
-            "fillOpacity": 10,
-            "stacking": { "mode": "normal" }
+            "fillOpacity": 10
           },
-          "unit": "reqps"
+          "unit": "ops"
         },
         "overrides": []
       },
       "targets": [
         {
-          "expr": "sum(rate(http_request_duration_seconds_count[1m])) by (handler)",
-          "legendFormat": "{{ handler }}",
-          "refId": "A"
-        }
-      ]
-    },
-    {
-      "title": "API Latency Heatmap",
-      "type": "heatmap",
-      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 },
-      "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
-      "targets": [
-        {
-          "expr": "sum(increase(http_request_duration_seconds_bucket[1m])) by (le)",
-          "legendFormat": "{{ le }}",
-          "refId": "A",
-          "format": "heatmap"
-        }
-      ],
-      "options": {
-        "calculate": false,
-        "yAxis": {
-          "unit": "s"
-        },
-        "color": {
-          "scheme": "Oranges"
-        }
-      }
-    },
-    {
-      "title": "API Error Rate (4xx + 5xx)",
-      "type": "timeseries",
-      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 16 },
-      "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
-      "fieldConfig": {
-        "defaults": {
-          "custom": {
-            "lineWidth": 2,
-            "fillOpacity": 20
-          },
-          "unit": "reqps",
-          "color": { "mode": "fixed", "fixedColor": "red" }
-        },
-        "overrides": []
-      },
-      "targets": [
-        {
-          "expr": "sum(rate(http_request_duration_seconds_count{status=~\"4..|5..\"}[1m]))",
-          "legendFormat": "Errors",
+          "expr": "sum by (exchange, consumer_group) (rate(redis_writes_total[1m]))",
+          "legendFormat": "{{exchange}} / {{consumer_group}}",
           "refId": "A"
         }
       ]
@@ -176,27 +106,117 @@
     {
       "title": "Consumer Lag",
       "type": "timeseries",
-      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 16 },
-      "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
+      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 8 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
       "fieldConfig": {
         "defaults": {
           "custom": {
             "lineWidth": 2,
-            "fillOpacity": 15
+            "fillOpacity": 10
           },
-          "color": { "mode": "fixed", "fixedColor": "orange" }
+          "unit": "short"
         },
         "overrides": []
       },
       "targets": [
         {
-          "expr": "consumer_lag",
-          "legendFormat": "Lag",
+          "expr": "sum by (consumer_group) (consumer_lag)",
+          "legendFormat": "{{consumer_group}}",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "title": "DLQ Volume",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 8 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "lineWidth": 2,
+            "fillOpacity": 10
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "expr": "sum by (exchange, consumer_group) (dlq_messages_total)",
+          "legendFormat": "{{exchange}} / {{consumer_group}}",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "title": "API Request Rate",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 16 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "lineWidth": 2,
+            "fillOpacity": 10
+          },
+          "unit": "reqps"
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "expr": "sum by (handler, method) (rate(http_requests_total[1m]))",
+          "legendFormat": "{{handler}} {{method}}",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "title": "API p95 Latency",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 16 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "lineWidth": 2,
+            "fillOpacity": 10
+          },
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, sum by (le, handler) (rate(http_request_duration_seconds_bucket[5m])))",
+          "legendFormat": "{{handler}}",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "title": "API Error Rate",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 16 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "lineWidth": 2,
+            "fillOpacity": 10
+          },
+          "unit": "reqps"
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "expr": "sum by (handler, status) (rate(http_requests_total{status=~\"4..|5..\"}[5m]))",
+          "legendFormat": "{{handler}} {{status}}",
           "refId": "A"
         }
       ]
     }
-  ],
-  "schemaVersion": 39,
-  "version": 1
+  ]
 }

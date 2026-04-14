@@ -1,0 +1,29 @@
+groups:
+  - name: pipeline-alerts
+    rules:
+      - alert: ApiDown
+        expr: up{job="api"} == 0
+        for: 30s
+        labels:
+          severity: critical
+        annotations:
+          summary: API scrape target is down
+          description: Prometheus can no longer scrape the API service on host.docker.internal:8000.
+
+      - alert: DlqNonZero
+        expr: sum by (exchange, consumer_group) (dlq_messages_total) > 0
+        for: 30s
+        labels:
+          severity: warning
+        annotations:
+          summary: Dead letter queue is non-zero
+          description: Messages are landing in the DLQ for exchange={{ $labels.exchange }} and consumer_group={{ $labels.consumer_group }}.
+
+      - alert: ConsumerLagHigh
+        expr: sum by (consumer_group) (consumer_lag) > 100
+        for: 30s
+        labels:
+          severity: warning
+        annotations:
+          summary: Consumer lag is high
+          description: Consumer lag is above threshold for consumer_group={{ $labels.consumer_group }}.

@@ -2,8 +2,9 @@ import json
 from datetime import datetime, timezone
 
 
-async def publish_to_dlq(producer, message, error):
+async def publish_to_dlq(producer, message, error, *, exchange: str):
     payload = {
+        "exchange": exchange,
         "original_topic": message.topic,
         "original_offset": message.offset,
         "original_value": message.value,

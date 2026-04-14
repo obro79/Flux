@@ -6,6 +6,7 @@ router = APIRouter()
 
 
 class Candle(BaseModel):
+    exchange: str
     product_id: str
     timestamp: datetime
     open: float
@@ -20,11 +21,12 @@ async def get_candles(
     request: Request,
     product_id: str,
     resolution: str,
+    exchange: str = Query(default="coinbase"),
     limit: int = Query(default=100, le=1000),
 ):
     if resolution != "1m":
         return []
 
     db = request.app.state.db
-    rows = db.get_candles(product_id, limit)
+    rows = db.get_candles(product_id, limit, exchange=exchange)
     return rows

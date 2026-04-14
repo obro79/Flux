@@ -1,6 +1,8 @@
 from .base import BaseExchange
-import websockets
 import json
+import websockets
+
+from exchanges.normalizers import normalize_coinbase_message
 from utils import retry_policy
 
 
@@ -30,9 +32,12 @@ class CoinbaseExchange(BaseExchange):
                 )
 
                 async for message in websocket:
-                    raw = (
-                        message.encode() if isinstance(message, str) else bytes(message)
+                    payload = json.loads(message)
+                    normalized = normalize_coinbase_message(payload)
+                    if normalized is None:
+                        continue
+                    await self.publish(
+                        "market_trades", normalized.model_dump_json().encode()
                     )
-                    await self.publish("market_trades", raw)
         finally:
             await self.stop_producer()

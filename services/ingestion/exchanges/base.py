@@ -1,13 +1,15 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from prometheus_client import Counter, start_http_server
+from prometheus_client import Counter
 
 from aiokafka import AIOKafkaProducer
 from aiokafka.admin import AIOKafkaAdminClient, NewTopic
 
 messages_published_total: Counter = Counter(
-    "messages_published_total", "Total messages published to Kafka"
+    "messages_published_total",
+    "Total messages published to Kafka",
+    labelnames=("exchange", "topic"),
 )
 
 
@@ -43,7 +45,6 @@ class BaseExchange(ABC):
         producer = AIOKafkaProducer(bootstrap_servers=self.bootstrap_servers)
         await producer.start()
         self.producer = producer
-        start_http_server(8001)
 
     async def stop_producer(self) -> None:
         if self.producer:
@@ -52,7 +53,7 @@ class BaseExchange(ABC):
     async def publish(self, topic: str, message: bytes) -> None:
         if self.producer:
             await self.producer.send(topic, message)
-            messages_published_total.inc()
+            messages_published_total.labels(exchange=self.name, topic=topic).inc()
 
     @abstractmethod
     async def run(self) -> None:

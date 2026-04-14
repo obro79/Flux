@@ -37,23 +37,33 @@ class IndicatorEngineConsumer(BaseConsumer):
 
     @retry_policy
     async def publish_to_redis(self, product_id: str, indicators: dict):
+        writes = 0
         async with self.redis.pipeline() as pipe:
             for name, value in indicators.items():
                 if value is not None:
                     pipe.set(f"indicator:{product_id}:{name}", value)
-                    redis_writes_total.inc()
+                    writes += 1
             await pipe.execute()
+        return writes
 
     async def process_trade(self, trade: Trade) -> None:
-        indicators = self.get_indicators(trade.product_id)
+        product_key = f"{trade.exchange}:{trade.product_id}"
+        indicators = self.get_indicators(product_key)
         results = {
             name: ind.add(trade.price)
             for name, ind in indicators.items()
         }
-        await self.publish_to_redis(trade.product_id, results)
+        writes = await self.publish_to_redis(product_key, results)
+        if writes:
+            redis_writes_total.labels(
+                consumer_group=self.group_id,
+                exchange=trade.exchange,
+                keyspace="indicator",
+            ).inc(writes)
         logger.info(
             "Indicators updated",
             extra={
+                "exchange": trade.exchange,
                 "product_id": trade.product_id,
                 "price": trade.price,
                 "indicators": results,

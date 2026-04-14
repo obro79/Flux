@@ -55,11 +55,14 @@ class CandleBuffer:
 
 class CandleAggregator:
     def __init__(self, grace_period: timedelta = timedelta(seconds=5)) -> None:
-        self.buffers: dict[str, dict[datetime, CandleBuffer]] = {}
+        self.buffers: dict[tuple[str, str], dict[datetime, CandleBuffer]] = {}
         self.grace_period = grace_period
 
     def add_trade(self, trade: Trade) -> None:
-        product_buffers = self.buffers.setdefault(trade.product_id, {})
+        product_buffers = self.buffers.setdefault(
+            (trade.exchange, trade.product_id),
+            {},
+        )
         bucket = minute_bucket(trade.time)
         buffer = product_buffers.setdefault(bucket, CandleBuffer())
         buffer.add_trade(trade.time, trade.price, trade.size)
@@ -68,7 +71,7 @@ class CandleAggregator:
         reference_time = now or datetime.now(timezone.utc)
         ready: list[dict[str, object]] = []
 
-        for product_id, product_buffers in list(self.buffers.items()):
+        for (exchange, product_id), product_buffers in list(self.buffers.items()):
             ready_minutes = sorted(
                 bucket
                 for bucket in product_buffers
@@ -77,29 +80,31 @@ class CandleAggregator:
             for bucket in ready_minutes:
                 ready.append(
                     {
+                        "exchange": exchange,
                         "product_id": product_id,
                         "timestamp": bucket,
                         **product_buffers.pop(bucket).to_dict(),
                     }
                 )
             if not product_buffers:
-                del self.buffers[product_id]
+                del self.buffers[(exchange, product_id)]
 
         return ready
 
     def flush_all(self) -> list[dict[str, object]]:
         ready: list[dict[str, object]] = []
 
-        for product_id, product_buffers in list(self.buffers.items()):
+        for (exchange, product_id), product_buffers in list(self.buffers.items()):
             for bucket in sorted(product_buffers):
                 ready.append(
                     {
+                        "exchange": exchange,
                         "product_id": product_id,
                         "timestamp": bucket,
                         **product_buffers[bucket].to_dict(),
                     }
                 )
-            del self.buffers[product_id]
+            del self.buffers[(exchange, product_id)]
 
         return ready
 
@@ -122,6 +127,7 @@ class TickerConsumer(BaseConsumer):
             logger.info(
                 "Flushed candle",
                 extra={
+                    "exchange": candle["exchange"],
                     "product_id": candle["product_id"],
                     "timestamp": candle["timestamp"],
                     "candle": candle,
@@ -135,6 +141,7 @@ class TickerConsumer(BaseConsumer):
             logger.info(
                 "Flushed final candle",
                 extra={
+                    "exchange": candle["exchange"],
                     "product_id": candle["product_id"],
                     "timestamp": candle["timestamp"],
                     "candle": candle,

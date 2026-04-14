@@ -8,6 +8,7 @@ from ticker_consumer import CandleAggregator, TickerConsumer, minute_bucket
 def trade_at(
     timestamp: str,
     *,
+    exchange: str = "coinbase",
     product_id: str = "BTC-USD",
     trade_id: str = "1",
     price: float = 100.0,
@@ -15,6 +16,7 @@ def trade_at(
     side: str = "BUY",
 ) -> Trade:
     return Trade(
+        exchange=exchange,
         trade_id=trade_id,
         product_id=product_id,
         price=price,
@@ -26,10 +28,14 @@ def trade_at(
 
 class FakeDatabase:
     def __init__(self) -> None:
-        self._rows: dict[tuple[str, datetime], dict[str, object]] = {}
+        self._rows: dict[tuple[str, str, datetime], dict[str, object]] = {}
 
     def insert_candle(self, candle: dict[str, object]) -> None:
-        key = (str(candle["product_id"]), candle["timestamp"])
+        key = (
+            str(candle["exchange"]),
+            str(candle["product_id"]),
+            candle["timestamp"],
+        )
         self._rows.setdefault(key, candle.copy())
 
     def disconnect(self) -> None:
@@ -53,10 +59,27 @@ def test_candle_aggregator_separates_products_and_minutes() -> None:
 
     candles = aggregator.flush_all()
 
-    assert [(c["product_id"], c["timestamp"]) for c in candles] == [
-        ("BTC-USD", datetime(2026, 4, 13, 22, 39, tzinfo=timezone.utc)),
-        ("BTC-USD", datetime(2026, 4, 13, 22, 40, tzinfo=timezone.utc)),
-        ("ETH-USD", datetime(2026, 4, 13, 22, 39, tzinfo=timezone.utc)),
+    assert [(c["exchange"], c["product_id"], c["timestamp"]) for c in candles] == [
+        ("coinbase", "BTC-USD", datetime(2026, 4, 13, 22, 39, tzinfo=timezone.utc)),
+        ("coinbase", "BTC-USD", datetime(2026, 4, 13, 22, 40, tzinfo=timezone.utc)),
+        ("coinbase", "ETH-USD", datetime(2026, 4, 13, 22, 39, tzinfo=timezone.utc)),
+    ]
+
+
+def test_candle_aggregator_separates_exchanges() -> None:
+    aggregator = CandleAggregator()
+    aggregator.add_trade(
+        trade_at("2026-04-13T22:39:10Z", exchange="coinbase", trade_id="1", price=10)
+    )
+    aggregator.add_trade(
+        trade_at("2026-04-13T22:39:20Z", exchange="kraken", trade_id="2", price=20)
+    )
+
+    candles = aggregator.flush_all()
+
+    assert [(c["exchange"], c["product_id"]) for c in candles] == [
+        ("coinbase", "BTC-USD"),
+        ("kraken", "BTC-USD"),
     ]
 
 
@@ -109,6 +132,7 @@ def test_late_trade_after_flush_is_effectively_dropped_by_persistence() -> None:
 
     assert len(db.rows) == 1
     candle = db.rows[0]
+    assert candle["exchange"] == "coinbase"
     assert candle["open"] == 100
     assert candle["close"] == 100
     assert candle["volume"] == 1
