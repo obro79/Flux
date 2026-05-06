@@ -61,4 +61,3 @@ def test_get_candles_rejects_unsupported_resolution() -> None:
         )
 
     assert exc.value.status_code == 400
-

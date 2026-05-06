@@ -8,4 +8,3 @@ def test_running_ema_warms_up_with_sma_then_updates() -> None:
     assert ema.add(12) == 12
     assert ema.add(14) == 12
     assert ema.add(16) == 14
-
