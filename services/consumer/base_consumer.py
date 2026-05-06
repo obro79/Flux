@@ -7,6 +7,7 @@ from contextlib import suppress
 import aiokafka
 import redis.asyncio as aioredis
 
+from services.config import kafka_bootstrap_servers
 from dead_letter_queue import publish_to_dlq
 from models import MarketTradeMessage, Trade
 from metrics import consumer_lag, dlq_messages_total, messages_consumed_total
@@ -19,18 +20,19 @@ class BaseConsumer(ABC):
         self,
         group_id: str,
         redis_url: str | None = None,
-        bootstrap_servers: str = "localhost:9092",
+        bootstrap_servers: str | None = None,
     ) -> None:
         self.group_id = group_id
         self.topic = "market_trades"
+        self.bootstrap_servers = bootstrap_servers or kafka_bootstrap_servers()
         self.consumer = aiokafka.AIOKafkaConsumer(
             self.topic,
-            bootstrap_servers=bootstrap_servers,
+            bootstrap_servers=self.bootstrap_servers,
             group_id=group_id,
             auto_offset_reset="earliest",
         )
         self.dlq_producer = aiokafka.AIOKafkaProducer(
-            bootstrap_servers=bootstrap_servers
+            bootstrap_servers=self.bootstrap_servers
         )
         self.redis = aioredis.from_url(redis_url) if redis_url else None
         self._lag_task: asyncio.Task | None = None

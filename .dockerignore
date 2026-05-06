@@ -1,0 +1,9 @@
+.env
+.env.production
+.git
+.mypy_cache
+.pytest_cache
+.ruff_cache
+.venv
+__pycache__
+*.pyc

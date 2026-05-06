@@ -117,6 +117,39 @@ Prometheus is available at `localhost:9090`.
 
 Docker Desktop must be running for local Kafka, Redis, Postgres, Prometheus, and Grafana.
 
+## Public Deployment
+
+The production deployment is designed for a single VPS running Docker Compose. Only the API is public; Kafka, Redis, Postgres, Prometheus, and Grafana remain on the private Docker network.
+
+```bash
+# On the VPS
+git clone https://github.com/obro79/Flux.git
+cd Flux
+cp .env.production.example .env.production
+
+# Edit API_DOMAIN, ACME_EMAIL, POSTGRES_PASSWORD, DATABASE_URL, and GRAFANA_ADMIN_PASSWORD.
+make prod-up
+```
+
+Caddy terminates HTTPS for `API_DOMAIN` and proxies to the FastAPI service. The same app image runs the API, live ingestion, consumer, and deterministic `demo` fallback publisher.
+
+Public demo endpoints:
+
+```bash
+curl "https://$API_DOMAIN/health"
+curl "https://$API_DOMAIN/markets"
+curl "https://$API_DOMAIN/candles/BTC-USD/1m?exchange=demo&limit=3"
+```
+
+WebSocket examples:
+
+```text
+wss://$API_DOMAIN/crypto/BTC-USD?exchange=demo
+wss://$API_DOMAIN/indicators/BTC-USD?exchange=demo
+```
+
+Live Coinbase and Kraken exchange data is best-effort. The `demo` exchange keeps the public API usable if exchange WebSocket traffic is quiet or unavailable.
+
 ## Observability
 
 Prometheus scrapes the ingestion, consumer, and API services on their local metrics ports. Grafana uses those scrape targets to show the pipeline overview dashboard:
@@ -166,6 +199,8 @@ Validation should cover three things: Prometheus sees ingestion, consumer, and A
 
 | Method | Path | Description |
 |--------|------|-------------|
+| `GET` | `/health` | Runtime health check |
+| `GET` | `/markets` | Supported exchanges, products, resolutions, and example URLs |
 | `GET` | `/candles/{product_id}/{resolution}` | Historical OHLCV candles; `1m` is currently the only supported resolution |
 | `WS` | `/crypto/{product_id}` | Live raw price and indicator stream |
 | `WS` | `/indicators/{product_id}` | Live indicator stream (SMA, RSI, EMA) |

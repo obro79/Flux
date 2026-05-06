@@ -1,4 +1,5 @@
-.env 
+.env
+.env.production
 uv.lock
 .venv/
 __pycache__

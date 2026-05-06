@@ -5,6 +5,7 @@ from prometheus_client import Counter
 
 from aiokafka import AIOKafkaProducer
 from aiokafka.admin import AIOKafkaAdminClient, NewTopic
+from services.config import kafka_bootstrap_servers
 
 messages_published_total: Counter = Counter(
     "messages_published_total",
@@ -14,10 +15,10 @@ messages_published_total: Counter = Counter(
 
 
 class BaseExchange(ABC):
-    def __init__(self, bootstrap_servers: str = "localhost:9092") -> None:
+    def __init__(self, bootstrap_servers: str | None = None) -> None:
         self.websocket_url: str = ""
         self.producer: AIOKafkaProducer | None = None
-        self.bootstrap_servers = bootstrap_servers
+        self.bootstrap_servers = bootstrap_servers or kafka_bootstrap_servers()
 
     @property
     @abstractmethod
