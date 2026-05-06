@@ -63,3 +63,7 @@ def test_update_lag_metrics_uses_end_offsets_and_positions() -> None:
         )._value.get()
         == 0
     )
+
+
+def test_extract_exchange_handles_malformed_raw_payload() -> None:
+    assert DummyConsumer.extract_exchange(b'{"exchange":"unknown","broken":true') == "unknown"

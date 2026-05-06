@@ -71,11 +71,11 @@ flowchart LR
     PR --> AL
 ```
 
-Current rollout is Coinbase live with Kraken next in the same trade schema. The public API stays stable while storage and metrics carry exchange labels end to end.
+Current rollout includes Coinbase and Kraken adapters in the same trade schema. The public API stays stable while storage and metrics carry exchange labels end to end.
 
 ## Features
 
-- Exchange-adapter model with Coinbase live and Kraken ready to land in the same `market_trades` path
+- Exchange-adapter model with Coinbase and Kraken in the same `market_trades` path
 - Kafka-backed fan-out for raw events, candle aggregation, and indicator computation
 - OHLCV candle aggregation with a short grace window for late trades
 - Streaming indicators computed per product and persisted in Redis
@@ -98,7 +98,7 @@ Current rollout is Coinbase live with Kraken next in the same trade schema. The 
 ## Quick Start
 
 ```bash
-# 1. Start infrastructure
+# 1. Start infrastructure with Docker Desktop running
 docker compose up -d
 
 # 2. Install dependencies
@@ -114,6 +114,8 @@ uv run run.py
 Kafka UI is available at `localhost:8888`.
 Grafana is available at `localhost:3000`.
 Prometheus is available at `localhost:9090`.
+
+Docker Desktop must be running for local Kafka, Redis, Postgres, Prometheus, and Grafana.
 
 ## Observability
 
@@ -144,18 +146,27 @@ DATABASE_URL=postgresql://postgres:postgres@localhost:5432/postgres REDIS_URL=re
 DATABASE_URL=postgresql://postgres:postgres@localhost:5432/postgres REDIS_URL=redis://localhost:6379 uv run services/consumer/main.py
 DATABASE_URL=postgresql://postgres:postgres@localhost:5432/postgres REDIS_URL=redis://localhost:6379 uv run uvicorn services.api.main:app --reload
 
-# checks
-curl http://127.0.0.1:8000/candles/BTC-USD/1m?limit=3
+# deterministic local integration smoke
+make smoke
+```
+
+`make smoke` expects Docker compose infrastructure to already be running. It starts only the API and consumer subprocesses, emits synthetic backdated Kafka trades, verifies persisted candle rows, checks unsupported resolutions return HTTP 400, confirms malformed traffic increments the DLQ metric, and waits for Prometheus to mark the API and consumer targets as `up`.
+
+Live ingestion remains a separate best-effort validation because exchange WebSocket availability and message volume vary:
+
+```bash
+DATABASE_URL=postgresql://postgres:postgres@localhost:5432/postgres REDIS_URL=redis://localhost:6379 uv run services/ingestion/main.py
+curl http://127.0.0.1:8001/metrics
 curl http://127.0.0.1:9090/api/v1/targets
 ```
 
-Validation should cover three things: Prometheus sees ingestion, consumer, and API as `up`; Grafana panels show non-empty series for the active services; and alert rules are loaded and can be forced locally by stopping the API, creating DLQ traffic, or building consumer lag.
+Validation should cover three things: Prometheus sees ingestion, consumer, and API as `up`; Grafana panels show non-empty series for the active services; and alert rules are loaded and can be forced locally by stopping the API, creating DLQ traffic with `uv run scripts/kafka_smoke.py --malformed`, or building consumer lag.
 
 ## API Endpoints
 
 | Method | Path | Description |
 |--------|------|-------------|
-| `GET` | `/candles/{product_id}/{resolution}` | Historical OHLCV candles |
+| `GET` | `/candles/{product_id}/{resolution}` | Historical OHLCV candles; `1m` is currently the only supported resolution |
 | `WS` | `/crypto/{product_id}` | Live raw price and indicator stream |
 | `WS` | `/indicators/{product_id}` | Live indicator stream (SMA, RSI, EMA) |
 

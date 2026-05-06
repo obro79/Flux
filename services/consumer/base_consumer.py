@@ -27,7 +27,6 @@ class BaseConsumer(ABC):
             self.topic,
             bootstrap_servers=bootstrap_servers,
             group_id=group_id,
-            value_deserializer=lambda x: json.loads(x) if x else None,
             auto_offset_reset="earliest",
         )
         self.dlq_producer = aiokafka.AIOKafkaProducer(
@@ -67,7 +66,18 @@ class BaseConsumer(ABC):
             ).set(lag)
 
     @staticmethod
-    def extract_exchange(payload: dict | None) -> str:
+    def decode_message_value(value: bytes | None) -> dict | None:
+        if value is None:
+            return None
+        return json.loads(value)
+
+    @staticmethod
+    def extract_exchange(payload: dict | bytes | None) -> str:
+        if isinstance(payload, bytes):
+            try:
+                payload = BaseConsumer.decode_message_value(payload)
+            except Exception:
+                return "unknown"
         if not payload:
             return "unknown"
         exchange = payload.get("exchange")
@@ -83,9 +93,10 @@ class BaseConsumer(ABC):
         try:
             async for message in self.consumer:
                 try:
-                    if message.value is None:
+                    payload = self.decode_message_value(message.value)
+                    if payload is None:
                         continue
-                    msg = MarketTradeMessage(**message.value)
+                    msg = MarketTradeMessage(**payload)
                     messages_consumed_total.labels(
                         consumer_group=self.group_id,
                         topic=message.topic,

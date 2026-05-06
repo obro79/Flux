@@ -15,7 +15,9 @@ class Database:
 
     @retry_policy
     def connect(self) -> psycopg2.extensions.connection:
-        return psycopg2.connect(self.connection_string)
+        connection = psycopg2.connect(self.connection_string)
+        connection.autocommit = True
+        return connection
 
     def disconnect(self):
         self.connection.close()
@@ -49,11 +51,22 @@ class Database:
             ALTER TABLE candles_1m
             ALTER COLUMN exchange SET NOT NULL;
 
-            ALTER TABLE candles_1m
-            DROP CONSTRAINT IF EXISTS candles_1m_pkey;
-
-            ALTER TABLE candles_1m
-            ADD PRIMARY KEY (exchange, product_id, timestamp);
+            DO $$
+            BEGIN
+                IF NOT EXISTS (
+                    SELECT 1
+                    FROM pg_constraint c
+                    JOIN pg_attribute a_exchange
+                        ON a_exchange.attrelid = c.conrelid
+                        AND a_exchange.attname = 'exchange'
+                        AND a_exchange.attnum = ANY(c.conkey)
+                    WHERE c.conrelid = 'candles_1m'::regclass
+                        AND c.contype = 'p'
+                ) THEN
+                    ALTER TABLE candles_1m DROP CONSTRAINT IF EXISTS candles_1m_pkey;
+                    ALTER TABLE candles_1m ADD PRIMARY KEY (exchange, product_id, timestamp);
+                END IF;
+            END $$;
             """
         )
         self.connection.commit()
@@ -101,14 +114,8 @@ class Database:
         columns = [desc[0] for desc in cursor.description]
         rows = [dict(zip(columns, row)) for row in cursor.fetchall()]
         cursor.close()
+        self.connection.commit()
         return rows
-
-    def rollup_candles(self):
-        pass
-
-    def delete_old_candles(self):
-        pass
-
 
 if __name__ == "__main__":
     db = Database()

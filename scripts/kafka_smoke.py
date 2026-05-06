@@ -1,7 +1,7 @@
 import argparse
 import asyncio
 import sys
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from aiokafka import AIOKafkaProducer
@@ -19,8 +19,44 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--product-id", default="BTC-USD")
     parser.add_argument("--count", type=int, default=1)
     parser.add_argument("--delay-ms", type=int, default=0)
+    parser.add_argument(
+        "--age-seconds",
+        type=float,
+        default=0,
+        help="Backdate generated trade timestamps by N seconds.",
+    )
     parser.add_argument("--malformed", action="store_true")
     return parser
+
+
+def build_trade_payload(
+    *,
+    exchange: str,
+    product_id: str,
+    index: int,
+    age_seconds: float = 0,
+    now: datetime | None = None,
+) -> bytes:
+    timestamp = now or datetime.now(timezone.utc)
+    trade_time = timestamp - timedelta(seconds=age_seconds)
+    trade = Trade(
+        exchange=exchange,
+        trade_id=f"smoke-{index}",
+        product_id=product_id,
+        price=100000 + index,
+        size=0.01,
+        side="BUY",
+        time=trade_time,
+    )
+    return (
+        MarketTradeMessage.from_trades(
+            exchange=exchange,
+            trades=[trade],
+            timestamp=trade_time,
+        )
+        .model_dump_json()
+        .encode()
+    )
 
 
 async def main() -> None:
@@ -32,24 +68,11 @@ async def main() -> None:
             if args.malformed:
                 payload = b'{"exchange":"unknown","broken":true'
             else:
-                now = datetime.now(timezone.utc)
-                trade = Trade(
+                payload = build_trade_payload(
                     exchange=args.exchange,
-                    trade_id=f"smoke-{index}",
                     product_id=args.product_id,
-                    price=100000 + index,
-                    size=0.01,
-                    side="BUY",
-                    time=now,
-                )
-                payload = (
-                    MarketTradeMessage.from_trades(
-                        exchange=args.exchange,
-                        trades=[trade],
-                        timestamp=now,
-                    )
-                    .model_dump_json()
-                    .encode()
+                    index=index,
+                    age_seconds=args.age_seconds,
                 )
 
             await producer.send_and_wait(args.topic, payload)

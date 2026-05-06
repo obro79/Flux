@@ -1,5 +1,6 @@
 import asyncio
 import logging
+from contextlib import suppress
 from datetime import datetime, timedelta, timezone
 
 from base_consumer import BaseConsumer
@@ -165,6 +166,8 @@ class TickerConsumer(BaseConsumer):
     async def on_stop(self) -> None:
         if self._flush_task:
             self._flush_task.cancel()
+            with suppress(asyncio.CancelledError):
+                await self._flush_task
         self.flush_all_candles()
         self.db.disconnect()
 

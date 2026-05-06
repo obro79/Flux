@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Query, Request
+from fastapi import APIRouter, HTTPException, Query, Request
 from pydantic import BaseModel
 from datetime import datetime
 
@@ -25,7 +25,10 @@ async def get_candles(
     limit: int = Query(default=100, le=1000),
 ):
     if resolution != "1m":
-        return []
+        raise HTTPException(
+            status_code=400,
+            detail="Unsupported candle resolution. Only 1m is available.",
+        )
 
     db = request.app.state.db
     rows = db.get_candles(product_id, limit, exchange=exchange)
