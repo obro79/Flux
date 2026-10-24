@@ -5,12 +5,10 @@ from base_consumer import BaseConsumer
 from metrics import redis_writes_total
 from models import Trade
 
-REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379")
-
 
 class RawConsumer(BaseConsumer):
     def __init__(self):
-        super().__init__(group_id="raw_consumer", redis_url=REDIS_URL)
+        super().__init__(group_id="raw_consumer", redis_url=os.getenv("REDIS_URL", "redis://localhost:6379"))
 
     async def process_trade(self, trade: Trade) -> None:
         product_key = f"{trade.exchange}:{trade.product_id}"

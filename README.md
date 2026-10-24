@@ -103,7 +103,7 @@ websocat "ws://localhost:8000/indicators/BTC-USD?exchange=coinbase"
 | `KAFKA_BOOTSTRAP_SERVERS` | `localhost:9092` | Kafka broker |
 | `SUPPORTED_EXCHANGES` / `SUPPORTED_PRODUCTS` | `coinbase,kraken,demo` / `BTC-USD,ETH-USD,SOL-USD` | Surface advertised by `/markets` |
 | `RATE_LIMIT_PER_MINUTE` | `120` | Per-client limit on public routes (`0` disables it) |
-| `DEMO_FALLBACK_ENABLED` | `true` | Deterministic `demo` exchange for when live feeds are quiet |
+| `DEMO_FALLBACK_ENABLED` | `true` | Enables the deterministic `demo` exchange publisher (runs by default in production; locally, start it with `uv run scripts/demo_fallback_publisher.py`) |
 
 ### API
 

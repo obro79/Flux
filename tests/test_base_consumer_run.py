@@ -151,3 +151,40 @@ def test_run_skips_tombstones_and_runs_lifecycle_hooks() -> None:
     assert consumer.started_hook and consumer.stopped_hook
     assert consumer.consumer.started and consumer.consumer.stopped
     assert consumer.dlq_producer.stopped
+
+
+class FailingOnceConsumer(RecordingConsumer):
+    async def process_trade(self, trade: Trade) -> None:
+        if trade.trade_id == "boom":
+            raise RuntimeError("redis unavailable")
+        await super().process_trade(trade)
+
+
+def test_run_routes_process_trade_errors_to_dlq_and_keeps_consuming() -> None:
+    failing = MarketTradeMessage.from_trades(exchange="coinbase", trades=[make_trade("boom", 1.0)])
+    good = MarketTradeMessage.from_trades(exchange="coinbase", trades=[make_trade("after", 2.0)])
+    consumer = FailingOnceConsumer(
+        [
+            kafka_message(failing.model_dump_json().encode(), 0),
+            kafka_message(good.model_dump_json().encode(), 1),
+        ],
+        group_id="run_process_error",
+    )
+
+    asyncio.run(consumer.run())
+
+    assert [trade.trade_id for trade in consumer.trades] == ["after"]
+    [(topic, raw)] = consumer.dlq_producer.sent
+    payload = json.loads(raw)
+    assert topic == "market_trades.dlq"
+    assert payload["original_offset"] == 0
+    assert payload["error_type"] == "RuntimeError"
+    assert payload["error"] == "redis unavailable"
+    assert payload["exchange"] == "coinbase"
+    assert counter_value(
+        dlq_messages_total,
+        consumer_group="run_process_error",
+        topic="market_trades",
+        error_type="RuntimeError",
+        exchange="coinbase",
+    ) == 1
