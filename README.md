@@ -31,21 +31,27 @@ Ingestion, consumers and the API are separate processes that share state only th
 
 ```mermaid
 flowchart LR
-    CB[Coinbase WS] --> ING[Ingestion<br/>adapters + normalizers]
-    KR[Kraken WS] --> ING
-    DM[Demo publisher] --> K
+    subgraph Sources
+        CB[Coinbase WS]
+        KR[Kraken WS]
+        DM[Demo publisher]
+    end
+    subgraph Consumers["Kafka consumer groups"]
+        RC[raw_consumer]
+        TC[candle_builder]
+        IC[indicator_engine]
+    end
+    CB & KR --> ING[Ingestion<br/>adapters + normalizers]
+    DM --> K
     ING --> K[[Kafka<br/>market_trades]]
-    K --> RC[raw_consumer]
-    K --> TC[candle_builder]
-    K --> IC[indicator_engine]
-    RC & TC & IC -. bad message .-> DLQ[[market_trades.dlq]]
+    K --> Consumers
+    Consumers -. bad messages .-> DLQ[[market_trades.dlq]]
     TC --> PG[(Postgres<br/>candles_1m)]
-    RC --> RD[(Redis)]
-    IC --> RD
-    PG --> API[FastAPI<br/>REST + WebSocket]
-    RD --> API
-    ING & RC & API -. metrics .-> PR[Prometheus] --> GF[Grafana]
+    RC & IC --> RD[(Redis)]
+    PG & RD --> API[FastAPI<br/>REST + WebSocket]
 ```
+
+Every service exports Prometheus metrics, which feed a provisioned Grafana dashboard and alert rules.
 
 The full design, covering the message schema, candle grace window, DLQ envelope, indicator math, delivery guarantees and known limitations, is in **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)**.
 
