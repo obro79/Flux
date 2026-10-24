@@ -37,8 +37,8 @@ flowchart LR
         DM[Demo publisher]
     end
     subgraph Consumers["Kafka consumer groups"]
-        RC[raw_consumer]
         TC[candle_builder]
+        RC[raw_consumer]
         IC[indicator_engine]
     end
     CB & KR --> ING[Ingestion<br/>adapters + normalizers]
