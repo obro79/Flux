@@ -11,41 +11,28 @@ flowchart LR
         KR[Kraken WS v2<br/>trade]
         DM[Demo publisher<br/>deterministic]
     end
-
-    subgraph Ingestion["Ingestion service :8001"]
-        AD[Exchange adapters]
-        NZ[Normalizers]
-    end
-
+    ING["Ingestion :8001<br/>adapters + normalizers"]
     K[[Kafka topic<br/>market_trades]]
-    DLQ[[Kafka topic<br/>market_trades.dlq]]
-
     subgraph Consumers["Consumer service :8002"]
-        RC[raw_consumer]
         TC[candle_builder]
+        RC[raw_consumer]
         IC[indicator_engine]
     end
-
+    DLQ[[Kafka topic<br/>market_trades.dlq]]
     PG[(Postgres<br/>candles_1m)]
     RD[(Redis<br/>crypto:* / indicator:*)]
     API["FastAPI :8000<br/>REST + WebSocket"]
-    PR[Prometheus] --> GF[Grafana]
 
-    CB --> AD
-    KR --> AD
-    AD --> NZ --> K
+    CB & KR --> ING --> K
     DM --> K
-    K --> RC & TC & IC
-    RC & TC & IC -. bad message .-> DLQ
-    RC --> RD
-    IC --> RD
+    K --> Consumers
+    Consumers -. bad messages .-> DLQ
     TC --> PG
-    PG --> API
-    RD --> API
-    Ingestion -. /metrics .-> PR
-    Consumers -. /metrics .-> PR
-    API -. /metrics .-> PR
+    RC & IC --> RD
+    PG & RD --> API
 ```
+
+Ingestion, the consumer service and the API each expose `/metrics` to Prometheus, which feeds Grafana and the alert rules (section 7).
 
 There are three long-running processes (ingestion, consumer, API) plus an optional demo publisher. They only share state through Kafka, Postgres and Redis, so each can be restarted or scaled on its own.
 
