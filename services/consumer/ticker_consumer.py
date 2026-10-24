@@ -5,8 +5,9 @@ from datetime import datetime, timedelta, timezone
 
 from base_consumer import BaseConsumer
 from models import Trade
-from services.database.database import Database
 from utils import retry_policy
+
+from services.database.database import Database
 
 logger = logging.getLogger(__name__)
 

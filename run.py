@@ -2,6 +2,7 @@ import asyncio
 import logging
 import signal
 import sys
+
 from pythonjsonlogger import jsonlogger
 
 signal.signal(signal.SIGTERM, lambda *_: sys.exit(0))

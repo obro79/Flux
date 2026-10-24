@@ -3,13 +3,11 @@ import os
 from typing import Protocol
 
 from base_consumer import BaseConsumer
+from metrics import redis_writes_total
 from models import Trade
 from utils import retry_policy
-from metrics import redis_writes_total
 
 logger = logging.getLogger(__name__)
-
-REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379")
 
 
 class Indicator(Protocol):
@@ -18,7 +16,7 @@ class Indicator(Protocol):
 
 class IndicatorEngineConsumer(BaseConsumer):
     def __init__(self):
-        super().__init__(group_id="indicator_engine", redis_url=REDIS_URL)
+        super().__init__(group_id="indicator_engine", redis_url=os.getenv("REDIS_URL", "redis://localhost:6379"))
         self.indicator_templates: dict[str, type] = {}
         self.indicator_kwargs: dict[str, dict] = {}
         self.product_indicators: dict[str, dict[str, Indicator]] = {}

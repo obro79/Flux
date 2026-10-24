@@ -1,223 +1,155 @@
-# Real-Time Crypto Data Pipeline
+# Flux
 
-> Exchange-aware crypto market data ingestion, Kafka fan-out, persistence, and observability.
+> A real-time crypto market data pipeline: live Coinbase and Kraken trades stream through Kafka into 1-minute candles, streaming indicators and a public REST and WebSocket API, with Prometheus and Grafana watching every stage.
 
-![Status](https://img.shields.io/badge/status-in%20progress-yellow)
+[![CI](https://github.com/obro79/Flux/actions/workflows/ci.yml/badge.svg)](https://github.com/obro79/Flux/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 ![Python](https://img.shields.io/badge/python-3.12+-3776AB?logo=python&logoColor=white)
-![FastAPI](https://img.shields.io/badge/FastAPI-009688?logo=fastapi&logoColor=white)
 ![Apache Kafka](https://img.shields.io/badge/Kafka-231F20?logo=apachekafka&logoColor=white)
-![Redis](https://img.shields.io/badge/Redis-DC382D?logo=redis&logoColor=white)
+![FastAPI](https://img.shields.io/badge/FastAPI-009688?logo=fastapi&logoColor=white)
 ![PostgreSQL](https://img.shields.io/badge/PostgreSQL-4169E1?logo=postgresql&logoColor=white)
-![Docker](https://img.shields.io/badge/Docker-2496ED?logo=docker&logoColor=white)
-![WebSocket](https://img.shields.io/badge/WebSocket-010101?logo=socketdotio&logoColor=white)
+![Redis](https://img.shields.io/badge/Redis-DC382D?logo=redis&logoColor=white)
+![Grafana](https://img.shields.io/badge/Grafana-F46800?logo=grafana&logoColor=white)
 
----
+<!-- TODO(owen): record a short GIF of the Grafana pipeline dashboard next to a websocat stream, save it as docs/demo.gif, and replace this block with:
+![Flux demo](docs/demo.gif)
+-->
+> **Demo:** _GIF coming soon (Grafana pipeline dashboard and a live indicator stream)._
+
+## What it does
+
+- **Ingests live trades from several exchanges.** Coinbase and Kraken WebSocket feeds are normalized into one schema, so adding an exchange means writing one adapter and nothing downstream changes.
+- **Fans out through Kafka.** Three independent consumer groups read the same topic: raw prices, candles and indicators. A slow database never stalls the live stream.
+- **Builds correct 1-minute OHLCV candles.** Buckets use event time, handle out-of-order trades, wait out a 5-second grace window for late data, and write idempotently to Postgres.
+- **Streams indicators in O(1) per trade.** SMA, EMA and Wilder RSI are kept per exchange and product in Redis and pushed over WebSockets.
+- **Isolates bad data.** Malformed messages go to a dead letter queue with full error context instead of crashing a consumer.
+- **Is observable end to end.** Per-exchange and per-consumer-group metrics, a provisioned Grafana dashboard, and alerts for API down, DLQ traffic and consumer lag.
 
 ## Architecture
 
+Ingestion, consumers and the API are separate processes that share state only through Kafka, Postgres and Redis. Each consumer group keeps its own offsets, so candles, indicators and raw prices can fall behind, replay or scale on their own.
+
 ```mermaid
 flowchart LR
-    subgraph Exchanges
-        CB[Coinbase]
-        KR[Kraken]
+    subgraph Sources
+        CB[Coinbase WS]
+        KR[Kraken WS]
+        DM[Demo publisher]
     end
-
-    subgraph Ingestion
-        ING[Exchange Adapters]
+    subgraph Consumers["Kafka consumer groups"]
+        TC[candle_builder]
+        RC[raw_consumer]
+        IC[indicator_engine]
     end
-
-    subgraph Broker
-        K[[Kafka: market_trades]]
-    end
-
-    subgraph Consumers
-        RC[Raw Consumer]
-        TC[Ticker Consumer]
-        IC[Indicator Engine]
-    end
-
-    subgraph Storage
-        PG[(PostgreSQL)]
-        RD[(Redis)]
-    end
-
-    subgraph API
-        REST[REST: /candles]
-        WS[WebSocket: /crypto and /indicators]
-    end
-
-    subgraph Observability
-        PR[Prometheus]
-        GF[Grafana]
-        AL[Alert Rules]
-    end
-
-    CB --> ING
-    KR --> ING
-    ING --> K
-    K --> RC
-    K --> TC
-    K --> IC
-    TC --> PG
-    IC --> RD
-    PG --> REST
-    RD --> WS
-    ING --> PR
-    RC --> PR
-    TC --> PR
-    IC --> PR
-    REST --> PR
-    PR --> GF
-    PR --> AL
+    CB & KR --> ING[Ingestion<br/>adapters + normalizers]
+    DM --> K
+    ING --> K[[Kafka<br/>market_trades]]
+    K --> Consumers
+    Consumers -. bad messages .-> DLQ[[market_trades.dlq]]
+    TC --> PG[(Postgres<br/>candles_1m)]
+    RC & IC --> RD[(Redis)]
+    PG & RD --> API[FastAPI<br/>REST + WebSocket]
 ```
 
-Current rollout includes Coinbase and Kraken adapters in the same trade schema. The public API stays stable while storage and metrics carry exchange labels end to end.
+Every service exports Prometheus metrics, which feed a provisioned Grafana dashboard and alert rules.
 
-## Features
+The full design, covering the message schema, candle grace window, DLQ envelope, indicator math, delivery guarantees and known limitations, is in **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)**.
 
-- Exchange-adapter model with Coinbase and Kraken in the same `market_trades` path
-- Kafka-backed fan-out for raw events, candle aggregation, and indicator computation
-- OHLCV candle aggregation with a short grace window for late trades
-- Streaming indicators computed per product and persisted in Redis
-- REST and WebSocket API for historical candles and live indicator reads
-- Observability built around Prometheus scrape targets, Grafana panels, and alert rules for API down, DLQ non-zero, and consumer lag high
+## Tech stack
 
-## Tech Stack
+| Layer | Technology |
+|---|---|
+| Ingestion | Python 3.12, `asyncio`, `websockets`, `aiokafka` |
+| Messaging | Apache Kafka (KRaft mode) with a dead letter topic |
+| Processing | Custom async consumers, Pydantic models, `tenacity` retries |
+| Storage | PostgreSQL (candles), Redis (live prices and indicators) |
+| API | FastAPI, Uvicorn, REST and WebSockets |
+| Observability | Prometheus, Grafana, alert rules, structured JSON logs |
+| Infra | Docker Compose, Caddy (TLS), GitHub Actions, `uv`, Ruff |
 
-| Layer | Technology | Role |
-|-------|-------------|------|
-| Ingestion | `websockets`, `aiokafka` | Connect to exchange feeds and publish normalized trades |
-| Messaging | Apache Kafka (KRaft) | Decouple ingestion from processing |
-| Processing | `asyncio`, custom consumers | Candle aggregation, indicator computation, DLQ handling |
-| Storage | PostgreSQL | Persistent candle storage |
-| Cache | Redis | Real-time indicator values |
-| API | FastAPI, Uvicorn | REST endpoints and WebSocket streaming |
-| Observability | Prometheus, Grafana | Scrape targets, dashboard panels, and alert evaluation |
-| Infra | Docker Compose | Kafka, Redis, Grafana, Prometheus, and Kafka UI |
+## Run locally
 
-## Quick Start
+**Prerequisites:** Docker Desktop (or Docker Engine with Compose), Python 3.12, and [uv](https://docs.astral.sh/uv/).
 
 ```bash
-# 1. Start infrastructure with Docker Desktop running
-docker compose up -d
-
-# 2. Install dependencies
+git clone https://github.com/obro79/Flux.git && cd Flux
+cp .env.example .env        # local defaults work out of the box
+docker compose up -d        # Kafka, Postgres, Redis, Prometheus, Grafana, Kafka UI
 uv sync
-
-# 3. Configure local runtime values
-cp .env.example .env
-
-# 4. Run the full pipeline
-uv run run.py
+uv run run.py               # ingestion + consumers + API
 ```
 
-Kafka UI is available at `localhost:8888`.
-Grafana is available at `localhost:3000`.
-Prometheus is available at `localhost:9090`.
-
-Docker Desktop must be running for local Kafka, Redis, Postgres, Prometheus, and Grafana.
-
-## Public Deployment
-
-The production deployment is designed for a single VPS running Docker Compose. Only the API is public; Kafka, Redis, Postgres, Prometheus, and Grafana remain on the private Docker network.
+Then try it:
 
 ```bash
-# On the VPS
-git clone https://github.com/obro79/Flux.git
-cd Flux
-cp .env.production.example .env.production
-
-# Edit API_DOMAIN, ACME_EMAIL, POSTGRES_PASSWORD, DATABASE_URL, and GRAFANA_ADMIN_PASSWORD.
-make prod-up
+curl "http://localhost:8000/markets"
+curl "http://localhost:8000/candles/BTC-USD/1m?exchange=coinbase&limit=3"
+websocat "ws://localhost:8000/indicators/BTC-USD?exchange=coinbase"
 ```
 
-Caddy terminates HTTPS for `API_DOMAIN` and proxies to the FastAPI service. The same app image runs the API, live ingestion, consumer, and deterministic `demo` fallback publisher.
+| Service | URL |
+|---|---|
+| API docs (Swagger) | http://localhost:8000/docs |
+| Grafana | http://localhost:3000 |
+| Prometheus | http://localhost:9090 |
+| Kafka UI | http://localhost:8888 |
 
-Public demo endpoints:
+**Environment variables** (see [`.env.example`](.env.example)):
 
-```bash
-curl "https://$API_DOMAIN/health"
-curl "https://$API_DOMAIN/markets"
-curl "https://$API_DOMAIN/candles/BTC-USD/1m?exchange=demo&limit=3"
-```
+| Variable | Default | Purpose |
+|---|---|---|
+| `DATABASE_URL` | `postgresql://postgres:postgres@localhost:5432/postgres` | Candle storage |
+| `REDIS_URL` | `redis://localhost:6379` | Live prices and indicators |
+| `KAFKA_BOOTSTRAP_SERVERS` | `localhost:9092` | Kafka broker |
+| `SUPPORTED_EXCHANGES` / `SUPPORTED_PRODUCTS` | `coinbase,kraken,demo` / `BTC-USD,ETH-USD,SOL-USD` | Surface advertised by `/markets` |
+| `RATE_LIMIT_PER_MINUTE` | `120` | Per-client limit on public routes (`0` disables it) |
+| `DEMO_FALLBACK_ENABLED` | `true` | Enables the deterministic `demo` exchange publisher (runs by default in production; locally, start it with `uv run scripts/demo_fallback_publisher.py`) |
 
-WebSocket examples:
-
-```text
-wss://$API_DOMAIN/crypto/BTC-USD?exchange=demo
-wss://$API_DOMAIN/indicators/BTC-USD?exchange=demo
-```
-
-Live Coinbase and Kraken exchange data is best-effort. The `demo` exchange keeps the public API usable if exchange WebSocket traffic is quiet or unavailable.
-
-## Observability
-
-Prometheus scrapes the ingestion, consumer, and API services on their local metrics ports. Grafana uses those scrape targets to show the pipeline overview dashboard:
-
-- Pipeline throughput by published and consumed message rate
-- DLQ volume
-- Redis write rate
-- API request rate, error rate, and latency
-- Consumer lag
-
-Alerting is based on the same Prometheus signals:
-
-- API down
-- DLQ non-zero
-- Consumer lag high
-
-The metric names are exchange-aware and group-aware so the dashboard can separate Coinbase, Kraken, and consumer group behavior without duplicating panels.
-
-## Local Validation Flow
-
-```bash
-# infrastructure
-docker compose up -d
-
-# services (in separate terminals)
-DATABASE_URL=postgresql://postgres:postgres@localhost:5432/postgres REDIS_URL=redis://localhost:6379 uv run services/ingestion/main.py
-DATABASE_URL=postgresql://postgres:postgres@localhost:5432/postgres REDIS_URL=redis://localhost:6379 uv run services/consumer/main.py
-DATABASE_URL=postgresql://postgres:postgres@localhost:5432/postgres REDIS_URL=redis://localhost:6379 uv run uvicorn services.api.main:app --reload
-
-# deterministic local integration smoke
-make smoke
-```
-
-`make smoke` expects Docker compose infrastructure to already be running. It starts only the API and consumer subprocesses, emits synthetic backdated Kafka trades, verifies persisted candle rows, checks unsupported resolutions return HTTP 400, confirms malformed traffic increments the DLQ metric, and waits for Prometheus to mark the API and consumer targets as `up`.
-
-Live ingestion remains a separate best-effort validation because exchange WebSocket availability and message volume vary:
-
-```bash
-DATABASE_URL=postgresql://postgres:postgres@localhost:5432/postgres REDIS_URL=redis://localhost:6379 uv run services/ingestion/main.py
-curl http://127.0.0.1:8001/metrics
-curl http://127.0.0.1:9090/api/v1/targets
-```
-
-Validation should cover three things: Prometheus sees ingestion, consumer, and API as `up`; Grafana panels show non-empty series for the active services; and alert rules are loaded and can be forced locally by stopping the API, creating DLQ traffic with `uv run scripts/kafka_smoke.py --malformed`, or building consumer lag.
-
-## API Endpoints
+### API
 
 | Method | Path | Description |
-|--------|------|-------------|
-| `GET` | `/health` | Runtime health check |
-| `GET` | `/markets` | Supported exchanges, products, resolutions, and example URLs |
-| `GET` | `/candles/{product_id}/{resolution}` | Historical OHLCV candles; `1m` is currently the only supported resolution |
-| `WS` | `/crypto/{product_id}` | Live raw price and indicator stream |
-| `WS` | `/indicators/{product_id}` | Live indicator stream (SMA, RSI, EMA) |
+|---|---|---|
+| `GET` | `/health` | Liveness check |
+| `GET` | `/markets` | Supported exchanges, products, resolutions and example URLs |
+| `GET` | `/candles/{product_id}/1m?exchange=&limit=` | Historical 1-minute OHLCV candles |
+| `WS` | `/crypto/{product_id}?exchange=` | Live price, size and indicators |
+| `WS` | `/indicators/{product_id}?exchange=` | Live SMA, EMA and RSI |
 
-## Project Structure
+### Deploy
+
+Production runs on a single VPS with Docker Compose. Only Caddy (HTTPS) is public, and Kafka, Postgres, Redis, Prometheus and Grafana stay on the private network.
+
+```bash
+cp .env.production.example .env.production   # set API_DOMAIN, ACME_EMAIL and passwords
+make prod-up
+make prod-smoke
+```
+
+## Tests
+
+```bash
+uv run pytest          # unit tests: no Kafka, Postgres or Redis needed
+uv run ruff check .    # lint
+make smoke             # end-to-end against the docker compose stack
+```
+
+The unit suite covers the logic that decides correctness: exchange normalizers, candle bucketing with late and out-of-order trades, indicator math against hand-computed values, the consumer loop's DLQ routing, and the API routes. `make smoke` publishes synthetic backdated trades through real Kafka, then checks the persisted candles, the API responses, a forced DLQ increment and the Prometheus targets. CI runs lint and tests on every push and pull request.
+
+## Project structure
 
 ```text
 services/
-├── ingestion/          # Exchange adapters -> Kafka
-│   └── exchanges/      # Coinbase and Kraken adapters
-├── consumer/           # Kafka -> Postgres + Redis
-│   ├── ticker_consumer.py
-│   ├── indicator_consumer.py
-│   └── indicators.py   # RunningSMA, RunningRSI, RunningEMA
-├── database/           # Postgres wrapper
-└── api/                # FastAPI REST + WebSocket
-    └── routes/
-monitoring/             # Prometheus and Grafana provisioning
-tests/                  # Pytest coverage for the runtime path
+├── ingestion/       # Exchange adapters and normalizers -> Kafka
+├── consumer/        # BaseConsumer, candle builder, indicator engine, DLQ, metrics
+├── market_data/     # Shared Pydantic trade schema
+├── database/        # Postgres access and idempotent schema setup
+└── api/             # FastAPI REST and WebSocket routes
+monitoring/          # Prometheus config, alert rules, Grafana provisioning
+scripts/             # Demo publisher, Kafka smoke test, end-to-end smoke test
+tests/               # Pytest unit suite
+docs/                # Architecture
 ```
+
+## Author
+
+Built by [Owen Fisher](https://github.com/obro79). Released under the [MIT License](LICENSE).

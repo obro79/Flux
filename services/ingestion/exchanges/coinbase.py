@@ -1,9 +1,10 @@
-from .base import BaseExchange
 import json
-import websockets
 
+import websockets
 from exchanges.normalizers import normalize_coinbase_message
 from utils import retry_policy
+
+from .base import BaseExchange
 
 
 class CoinbaseExchange(BaseExchange):

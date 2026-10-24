@@ -3,10 +3,10 @@ from __future__ import annotations
 import json
 
 import websockets
-
-from .base import BaseExchange
 from exchanges.normalizers import normalize_kraken_message
 from utils import retry_policy
+
+from .base import BaseExchange
 
 
 class KrakenExchange(BaseExchange):

@@ -1,6 +1,5 @@
 .env
 .env.production
-uv.lock
 .venv/
 __pycache__
 .mypy_cache/

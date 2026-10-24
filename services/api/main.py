@@ -1,19 +1,20 @@
 import os
 import time
 from collections import defaultdict, deque
+from contextlib import asynccontextmanager
+
+import redis.asyncio as redis
 from fastapi import FastAPI
+from prometheus_fastapi_instrumentator import Instrumentator
 from starlette.requests import Request
 from starlette.responses import Response
-from prometheus_fastapi_instrumentator import Instrumentator
-from contextlib import asynccontextmanager
-import redis.asyncio as redis
-from services.database.database import Database
+
 from services.api.routes.candles import router as candles_router
 from services.api.routes.crypto import router as crypto_router
 from services.api.routes.health import router as health_router
 from services.api.routes.indicators import router as indicators_router
 from services.api.routes.markets import router as markets_router
-
+from services.database.database import Database
 
 RATE_LIMIT_PER_MINUTE = int(os.getenv("RATE_LIMIT_PER_MINUTE", "120"))
 RATE_LIMIT_PATH_PREFIXES = ("/candles", "/crypto", "/indicators", "/markets", "/docs", "/openapi.json")

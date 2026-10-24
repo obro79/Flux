@@ -16,7 +16,6 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from scripts.kafka_smoke import build_trade_payload
 
-
 ROOT = Path(__file__).resolve().parent.parent
 DATABASE_URL = "postgresql://postgres:postgres@localhost:5432/postgres"
 REDIS_URL = "redis://localhost:6379"
@@ -214,4 +213,4 @@ if __name__ == "__main__":
         asyncio.run(run_smoke())
     except SmokeError as exc:
         print(f"local integration smoke failed: {exc}", file=sys.stderr)
-        raise SystemExit(1)
+        raise SystemExit(1) from exc

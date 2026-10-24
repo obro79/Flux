@@ -1,16 +1,14 @@
-import os
 import asyncio
+import os
 
 from base_consumer import BaseConsumer
-from models import Trade
 from metrics import redis_writes_total
-
-REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379")
+from models import Trade
 
 
 class RawConsumer(BaseConsumer):
     def __init__(self):
-        super().__init__(group_id="raw_consumer", redis_url=REDIS_URL)
+        super().__init__(group_id="raw_consumer", redis_url=os.getenv("REDIS_URL", "redis://localhost:6379"))
 
     async def process_trade(self, trade: Trade) -> None:
         product_key = f"{trade.exchange}:{trade.product_id}"
