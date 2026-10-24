@@ -1,17 +1,18 @@
 [project]
-name = "my-project"
+name = "flux"
 version = "0.1.0"
-description = "Add your description here"
+description = "Real-time crypto market data pipeline: exchange WebSockets to Kafka, candles in Postgres, indicators in Redis, served by FastAPI."
 readme = "README.md"
+license = "MIT"
 requires-python = ">=3.12"
 dependencies = [
     "aiokafka>=0.13.0",
-    "asyncio>=4.0.0",
     "websockets>=16.0",
     "redis>=5.0.0",
     "psycopg2>=2.9.11",
-    "dotenv>=0.9.9",
+    "python-dotenv>=1.0.0",
     "fastapi>=0.135.1",
+    "pydantic>=2.0.0",
     "uvicorn>=0.42.0",
     "python-json-logger>=4.0.0",
     "tenacity>=9.1.4",
@@ -22,4 +23,14 @@ dependencies = [
 [dependency-groups]
 dev = [
     "pytest>=8.3.5",
+    "ruff>=0.6.0",
 ]
+
+[tool.ruff]
+line-length = 120
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B"]
+# BaseConsumer.on_start/on_stop are optional hooks, intentionally not abstract.
+ignore = ["B027"]

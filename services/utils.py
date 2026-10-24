@@ -1,6 +1,7 @@
 # services/utils.py
-import tenacity
 import logging
+
+import tenacity
 
 logger = logging.getLogger(__name__)
 

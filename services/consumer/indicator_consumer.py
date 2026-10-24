@@ -3,9 +3,9 @@ import os
 from typing import Protocol
 
 from base_consumer import BaseConsumer
+from metrics import redis_writes_total
 from models import Trade
 from utils import retry_policy
-from metrics import redis_writes_total
 
 logger = logging.getLogger(__name__)
 

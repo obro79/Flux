@@ -1,17 +1,18 @@
 import asyncio
-from contextlib import suppress
 import sys
+from contextlib import suppress
 from pathlib import Path
+
 # Add project root for "services.*" imports, this dir for local imports, and services/ for utils
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 
 from indicator_consumer import IndicatorEngineConsumer
-from ticker_consumer import TickerConsumer
-from raw_consumer import RawConsumer
-from indicators import RunningEMA, RunningSMA, RunningRSI
+from indicators import RunningEMA, RunningRSI, RunningSMA
 from prometheus_client import start_http_server
+from raw_consumer import RawConsumer
+from ticker_consumer import TickerConsumer
 
 
 async def main():

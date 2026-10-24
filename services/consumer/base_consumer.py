@@ -6,11 +6,11 @@ from contextlib import suppress
 
 import aiokafka
 import redis.asyncio as aioredis
+from dead_letter_queue import publish_to_dlq
+from metrics import consumer_lag, dlq_messages_total, messages_consumed_total
+from models import MarketTradeMessage, Trade
 
 from services.config import kafka_bootstrap_servers
-from dead_letter_queue import publish_to_dlq
-from models import MarketTradeMessage, Trade
-from metrics import consumer_lag, dlq_messages_total, messages_consumed_total
 
 logger = logging.getLogger(__name__)
 

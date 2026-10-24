@@ -1,10 +1,11 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from prometheus_client import Counter
 
 from aiokafka import AIOKafkaProducer
 from aiokafka.admin import AIOKafkaAdminClient, NewTopic
+from prometheus_client import Counter
+
 from services.config import kafka_bootstrap_servers
 
 messages_published_total: Counter = Counter(

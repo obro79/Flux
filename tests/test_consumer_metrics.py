@@ -1,7 +1,6 @@
 import asyncio
 
 from aiokafka import TopicPartition
-
 from base_consumer import BaseConsumer
 from metrics import consumer_lag
 from models import Trade

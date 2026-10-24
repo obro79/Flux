@@ -1,8 +1,9 @@
+import os
+
 import psycopg2
 from dotenv import load_dotenv
-import os
-from services.utils import retry_policy
 
+from services.utils import retry_policy
 
 load_dotenv()
 
@@ -112,7 +113,7 @@ class Database:
             (exchange, product_id, limit),
         )
         columns = [desc[0] for desc in cursor.description]
-        rows = [dict(zip(columns, row)) for row in cursor.fetchall()]
+        rows = [dict(zip(columns, row, strict=True)) for row in cursor.fetchall()]
         cursor.close()
         self.connection.commit()
         return rows

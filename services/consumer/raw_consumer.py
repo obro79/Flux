@@ -1,9 +1,9 @@
-import os
 import asyncio
+import os
 
 from base_consumer import BaseConsumer
-from models import Trade
 from metrics import redis_writes_total
+from models import Trade
 
 REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379")
 

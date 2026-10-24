@@ -13,7 +13,6 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from services.config import csv_env, kafka_bootstrap_servers
 from services.market_data.models import MarketTradeMessage, Trade
 
-
 BASE_PRICES = {
     "BTC-USD": 100000.0,
     "ETH-USD": 3500.0,
